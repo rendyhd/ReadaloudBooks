@@ -1,0 +1,50 @@
+name: Android Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Decode Keystore
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo $KEYSTORE_BASE64 | base64 --decode > release.keystore
+          echo "KEYSTORE_FILE=$(pwd)/release.keystore" >> $GITHUB_ENV
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          gradle assembleRelease \
+            -PenableAbiSplit=true \
+            -PversionName=${GITHUB_REF_NAME#v} \
+            -PversionCode=$((1000 + GITHUB_RUN_NUMBER))
+
+      - name: Rename Artifacts
+        run: |
+          cd app/build/outputs/apk/release
+          for f in *.apk; do mv "$f" "../../../../../ReadaloudBooks-${GITHUB_REF_NAME}-${f}"; done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ReadaloudBooks-*.apk
+          generate_release_notes: true

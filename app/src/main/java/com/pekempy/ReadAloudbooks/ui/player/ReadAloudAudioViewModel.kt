@@ -1,0 +1,895 @@
+package com.pekempy.ReadAloudbooks.ui.player
+
+import androidx.compose.runtime.*
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.MediaMetadata
+import com.pekempy.ReadAloudbooks.data.Book
+import com.pekempy.ReadAloudbooks.data.UserPreferencesRepository
+import com.pekempy.ReadAloudbooks.data.api.AppContainer
+import com.pekempy.ReadAloudbooks.util.DownloadUtils
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.zip.ZipFile
+import android.net.Uri
+import android.content.ComponentName
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
+import java.util.concurrent.TimeUnit
+import com.pekempy.ReadAloudbooks.data.UnifiedProgress
+
+class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository) : ViewModel() {
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var player: Player? = null
+    
+    var currentBook by mutableStateOf<Book?>(null)
+    var isPlaying by mutableStateOf(false)
+    var currentPosition by mutableLongStateOf(0L)
+    var duration by mutableLongStateOf(0L)
+    var playbackSpeed by mutableFloatStateOf(1.0f)
+    var isLoading by mutableStateOf(true)
+    var chapters by mutableStateOf<List<Chapter>>(emptyList())
+    var currentChapterIndex by mutableIntStateOf(-1)
+    var sleepTimerRemaining by mutableLongStateOf(0L)
+    var error by mutableStateOf<String?>(null)
+    var sleepTimerFinishChapter by mutableStateOf(false)
+    var currentElementId by mutableStateOf<String?>(null)
+        private set
+    
+    var audioChapterOffsets by mutableStateOf<Map<String, Double>>(emptyMap())
+        private set
+    
+    data class SyncConfirmation(
+        val newPositionMs: Long,
+        val progressPercent: Float,
+        val source: String
+    )
+    var syncConfirmation by mutableStateOf<SyncConfirmation?>(null)
+    
+    private var sleepTimerJob: Job? = null
+    private var progressJob: Job? = null
+    private var loadJob: Job? = null
+    private var filesDir: File? = null
+    private var appContext: android.content.Context? = null
+    private var currentZipFile: ZipFile? = null
+    private var pendingSeekPosition: Long? = null
+    
+    data class ClipSegment(
+        val elementId: String, 
+        val audioSrc: String,
+        val audioFile: File,
+        val clipBeginMs: Long,
+        var clipEndMs: Long,
+        val cumulativeStartMs: Long,
+        val chapterIndex: Int,
+        val subSegments: MutableList<SubSegment> = mutableListOf()
+    )
+    
+    data class SubSegment(
+        val elementId: String,
+        val relativeStartMs: Long,
+        val durationMs: Long
+    )
+    
+    data class Chapter(
+        val title: String,
+        val startOffset: Long,
+        val duration: Long
+    )
+    
+    private val clipSegments = mutableListOf<ClipSegment>()
+    private val extractedAudioFiles = mutableMapOf<String, File>() 
+
+    fun initializePlayer(context: android.content.Context) {
+        this.appContext = context.applicationContext
+        this.filesDir = context.filesDir
+        
+        if (player == null) {
+            val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+            controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+            controllerFuture?.addListener({
+                val controller = controllerFuture?.get() ?: return@addListener
+                this.player = controller
+                
+                controller.addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(playing: Boolean) {
+                        this@ReadAloudAudioViewModel.isPlaying = playing
+                    }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        val index = controller.currentMediaItemIndex
+                        if (index in clipSegments.indices) {
+                            val clip = clipSegments[index]
+                            currentElementId = clip.elementId
+                            currentChapterIndex = clip.chapterIndex
+                            android.util.Log.d("ReadAloudAudioVM", "Transition to element: $currentElementId, Chapter: $currentChapterIndex")
+                        }
+                    }
+
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == Player.STATE_READY) {
+                            val totalDur = controller.duration
+                            if (totalDur > duration) {
+                                duration = totalDur
+                            }
+                            
+                            pendingSeekPosition?.let { seekPos ->
+                                val targetPos = seekPos.coerceIn(0, duration)
+                                this@ReadAloudAudioViewModel.seekTo(targetPos)
+                                pendingSeekPosition = null
+                            }
+                        }
+                    }
+
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        android.util.Log.e("ReadAloudAudioVM", "Playback error: ${error.message}")
+                        this@ReadAloudAudioViewModel.error = "Playback error: ${error.message}"
+                    }
+                })
+                startProgressUpdate()
+            }, MoreExecutors.directExecutor())
+        }
+    }
+
+    fun loadBook(
+        bookId: String, 
+        smilData: Map<String, List<com.pekempy.ReadAloudbooks.ui.reader.ReaderViewModel.SyncSegment>>, 
+        chapterOffsets: Map<String, Double>,
+        spineHrefs: List<String>,
+        spineTitles: Map<String, String> = emptyMap(),
+        autoPlay: Boolean = true
+    ) {
+        if (currentBook?.id == bookId && player != null && player?.playbackState != androidx.media3.common.Player.STATE_IDLE) {
+            android.util.Log.d("ReadAloudAudioVM", "Book $bookId already loaded. Checking for external progress updates...")
+            viewModelScope.launch(Dispatchers.Main) {
+                val progressStr = repository.getBookProgress(bookId).first()
+                progressStr?.let {
+                    val progress = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromString(it)
+                    progress?.let { p ->
+                        val savedMs = p.audioTimestampMs
+                        if (savedMs > 0) {
+                            val diff = savedMs - currentPosition
+                            val fiveMinutesMs = 5 * 60 * 1000L
+                            
+                            val isAtStart = currentPosition < 5000L
+                            
+                            if ((diff < 0 && diff >= -fiveMinutesMs) || (isAtStart && diff > 0)) {
+                                android.util.Log.d("ReadAloudAudioVM", "Auto-syncing position jump: $diff ms (isAtStart=$isAtStart)")
+                                seekTo(savedMs)
+                            } else if (kotlin.math.abs(diff) > 5000) {
+                                android.util.Log.d("ReadAloudAudioVM", "Showing sync confirmation for jump: $diff ms")
+                                val percent = if (duration > 0) (savedMs.toFloat() / duration) * 100 else 0f
+                                syncConfirmation = SyncConfirmation(
+                                    newPositionMs = savedMs,
+                                    progressPercent = percent,
+                                    source = "another device"
+                                )
+                            }
+                        }
+                    }
+                }
+                isLoading = false
+            }
+            return
+        }
+
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            isLoading = true
+            error = null
+            
+            try {
+                val apiManager = AppContainer.apiClientManager
+                val apiBook = apiManager.getApi().getBookDetails(bookId)
+                
+                val apiSeries = apiBook.series?.firstOrNull()
+                val apiCollection = apiBook.collections?.firstOrNull()
+                
+                val book = Book(
+                    id = apiBook.uuid,
+                    title = apiBook.title,
+                    author = apiBook.authors.joinToString(", ") { it.name },
+                    narrator = apiBook.narrators?.joinToString(", ") { it.name },
+                    coverUrl = apiManager.getCoverUrl(apiBook.uuid),
+                    audiobookCoverUrl = apiManager.getAudiobookCoverUrl(apiBook.uuid),
+                    ebookCoverUrl = apiManager.getEbookCoverUrl(apiBook.uuid),
+                    description = apiBook.description,
+                    series = apiSeries?.name ?: apiCollection?.name,
+                    seriesIndex = apiBook.series?.firstNotNullOfOrNull { it.seriesIndex }
+                        ?: apiBook.collections?.firstNotNullOfOrNull { it.seriesIndex }
+                )
+                
+                withContext(Dispatchers.Main) {
+                    currentBook = book
+                }
+                repository.saveLastActiveBook(bookId, "readaloud")
+                
+                withContext(Dispatchers.Main) {
+                    duration = 0
+                    currentPosition = 0
+                }
+                
+                val bookDir = DownloadUtils.getBookDir(filesDir!!, book)
+                val baseFileName = DownloadUtils.getBaseFileName(book)
+                val epubFile = File(bookDir, "$baseFileName (readaloud).epub")
+                
+                if (!epubFile.exists()) {
+                    throw Exception("Read-aloud EPUB not found on disk")
+                }
+                
+                currentZipFile = ZipFile(epubFile)
+                
+                val localExtractedFiles = mutableMapOf<String, File>()
+                extractAudioFiles(smilData, bookId, localExtractedFiles)
+                
+                val localClipSegments = mutableListOf<ClipSegment>()
+                val localChapterOffsets = mutableMapOf<String, Long>()
+                createClippedSegments(smilData, spineHrefs, localExtractedFiles, localClipSegments, localChapterOffsets)
+                
+                val calculatedDuration = localClipSegments.sumOf { it.clipEndMs - it.clipBeginMs }
+                val localChaptersList = createChaptersList(localChapterOffsets, spineHrefs, spineTitles, calculatedDuration)
+                
+                val mediaMetadataBuilder = MediaMetadata.Builder()
+                    .setTitle(book.title)
+                    .setArtist(book.author)
+                    .setSubtitle(book.narrator)
+                
+                val coverUrl = book.audiobookCoverUrl ?: book.coverUrl
+                if (!coverUrl.isNullOrEmpty()) {
+                    try {
+                        mediaMetadataBuilder.setArtworkUri(Uri.parse(coverUrl))
+                    } catch (e: Exception) {
+                        android.util.Log.w("ReadAloudAudioVM", "Failed to parse cover URL: $coverUrl")
+                    }
+                }
+                val mediaMetadata = mediaMetadataBuilder.build()
+                
+                android.util.Log.d("ReadAloudAudioVM", "Building media items from ${localClipSegments.size} clips")
+                
+                val mediaItems = localClipSegments.map { clip ->
+                    val chapter = localChaptersList.findLast { it.startOffset <= clip.cumulativeStartMs }
+                    val extras = android.os.Bundle().apply {
+                        putLong("globalDurationMs", calculatedDuration)
+                        putLong("cumulativeStartMs", clip.cumulativeStartMs)
+                        putBoolean("isAudiobookMode", true)
+                    }
+                    val itemMetadata = mediaMetadataBuilder
+                        .setTitle(book.title)
+                        .setSubtitle(chapter?.title ?: book.author)
+                        .setExtras(extras)
+                        .build()
+
+                    MediaItem.Builder()
+                        .setUri(Uri.fromFile(clip.audioFile))
+                        .setClippingConfiguration(
+                            MediaItem.ClippingConfiguration.Builder()
+                                .setStartPositionMs(clip.clipBeginMs)
+                                .setEndPositionMs(clip.clipEndMs)
+                                .build()
+                        )
+                        .setMediaMetadata(itemMetadata)
+                        .build()
+                }
+                
+                android.util.Log.d("ReadAloudAudioVM", "Built ${mediaItems.size} media items, setting to player...")
+                
+                var connectionWaitTime = 0
+                while (player == null && connectionWaitTime < 100) { 
+                    delay(100)
+                    connectionWaitTime++
+                }
+                
+                if (player == null) {
+                    throw Exception("Timed out waiting for audio service connection")
+                }
+                
+                withContext(Dispatchers.Main) {
+                    clipSegments.clear()
+                    clipSegments.addAll(localClipSegments)
+                    extractedAudioFiles.clear()
+                    extractedAudioFiles.putAll(localExtractedFiles)
+                    hrefToAudioOffset.clear()
+                    hrefToAudioOffset.putAll(localChapterOffsets)
+                    audioChapterOffsets = localChapterOffsets.mapValues { it.value / 1000.0 }
+                    chapters = localChaptersList
+                    duration = calculatedDuration
+                    
+                    player?.setMediaItems(mediaItems)
+                    player?.prepare()
+                    android.util.Log.d("ReadAloudAudioVM", "Player prepared with ${mediaItems.size} items")
+                }
+                
+                loadProgress(bookId)
+                
+                withContext(Dispatchers.Main) {
+                    if (player?.playbackState == Player.STATE_READY) {
+                        pendingSeekPosition?.let { seekPos ->
+                            seekTo(seekPos)
+                            pendingSeekPosition = null
+                        }
+                    }
+                }
+                
+                val perBookSpeed = repository.getBookPlaybackSpeed(bookId).first()
+                if (perBookSpeed != null) {
+                    withContext(Dispatchers.Main) {
+                        setSpeed(perBookSpeed)
+                    }
+                } else {
+                    val settings = repository.userSettings.first()
+                    withContext(Dispatchers.Main) {
+                        setSpeed(settings.playbackSpeed)
+                    }
+                }
+                
+            } catch (e: Exception) {
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    e.printStackTrace()
+                    error = "Error: ${e.message ?: e.javaClass.simpleName}"
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    fun restoreBook(bookId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val apiManager = AppContainer.apiClientManager
+                val apiBook = apiManager.getApi().getBookDetails(bookId)
+                
+                val apiSeries = apiBook.series?.firstOrNull()
+                val apiCollection = apiBook.collections?.firstOrNull()
+                
+                val book = Book(
+                    id = apiBook.uuid,
+                    title = apiBook.title,
+                    author = apiBook.authors.joinToString(", ") { it.name },
+                    narrator = apiBook.narrators?.joinToString(", ") { it.name },
+                    coverUrl = apiManager.getCoverUrl(apiBook.uuid),
+                    audiobookCoverUrl = apiManager.getAudiobookCoverUrl(apiBook.uuid),
+                    ebookCoverUrl = apiManager.getEbookCoverUrl(apiBook.uuid),
+                    description = apiBook.description,
+                    series = apiSeries?.name ?: apiCollection?.name,
+                    seriesIndex = apiBook.series?.firstNotNullOfOrNull { it.seriesIndex }
+                        ?: apiBook.collections?.firstNotNullOfOrNull { it.seriesIndex }
+                )
+                
+                val progressStr = repository.getBookProgress(bookId).first()
+                val progress = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromString(progressStr)
+                
+                withContext(Dispatchers.Main) {
+                     currentBook = book
+                     if (progress != null) {
+                         currentPosition = progress.audioTimestampMs
+                         duration = progress.totalDurationMs
+                         currentChapterIndex = progress.chapterIndex
+                         currentElementId = progress.elementId
+                     }
+                     isLoading = false
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    private suspend fun extractAudioFiles(
+        smilData: Map<String, List<com.pekempy.ReadAloudbooks.ui.reader.ReaderViewModel.SyncSegment>>,
+        bookId: String,
+        outputMap: MutableMap<String, File>
+    ) {
+        val zip = currentZipFile ?: return
+        
+        val tempDir = File(appContext!!.cacheDir, "readaloud_audio/$bookId")
+        if (!tempDir.exists()) {
+            tempDir.mkdirs()
+        }
+        
+        val uniqueAudioSources = mutableSetOf<String>()
+        smilData.values.forEach { segments ->
+            segments.forEach { segment ->
+                uniqueAudioSources.add(segment.audioSrc)
+            }
+        }
+        
+        android.util.Log.d("ReadAloudAudioVM", "Found ${uniqueAudioSources.size} unique audio files to extract")
+        
+        uniqueAudioSources.forEach { audioSrc ->
+            val filename = audioSrc.substringAfterLast("/")
+            
+            android.util.Log.d("ReadAloudAudioVM", "Searching for audio: $audioSrc (filename: $filename)")
+            
+            val possiblePaths = listOf(
+                audioSrc.removePrefix("../"),
+                "OEBPS/${audioSrc.removePrefix("../")}",
+                "Audio/$filename",
+                "OEBPS/Audio/$filename",
+                audioSrc
+            )
+            
+            var entry: java.util.zip.ZipEntry? = null
+            var foundPath: String? = null
+            
+            for (path in possiblePaths) {
+                entry = zip.getEntry(path)
+                if (entry != null) {
+                    foundPath = path
+                    break
+                }
+            }
+
+            if (entry == null) {
+                val allEntries = zip.entries()
+                while (allEntries.hasMoreElements()) {
+                    val next = allEntries.nextElement()
+                    if (next.name.endsWith("/$filename") || next.name == filename) {
+                        entry = next
+                        foundPath = next.name
+                        break
+                    }
+                }
+            }
+            
+            if (entry == null) {
+                android.util.Log.e("ReadAloudAudioVM", "Audio file NOT FOUND: $audioSrc")
+                return@forEach
+            }
+            
+            android.util.Log.d("ReadAloudAudioVM", "Found audio at: $foundPath")
+            
+            val safeName = audioSrc.replace("/", "_").replace("\\", "_").removePrefix(".._")
+            val tempFile = File(tempDir, safeName)
+            
+            if (tempFile.exists() && tempFile.length() > 0) {
+                android.util.Log.d("ReadAloudAudioVM", "Using existing file: $audioSrc")
+                outputMap[audioSrc] = tempFile
+                return@forEach
+            }
+            
+            zip.getInputStream(entry).use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            
+            outputMap[audioSrc] = tempFile
+            android.util.Log.d("ReadAloudAudioVM", "Extracted: $audioSrc → ${tempFile.name} (${tempFile.length()} bytes)")
+        }
+        
+        android.util.Log.d("ReadAloudAudioVM", "Extracted ${outputMap.size} audio files")
+    }
+    
+    private fun createClippedSegments(
+        smilData: Map<String, List<com.pekempy.ReadAloudbooks.ui.reader.ReaderViewModel.SyncSegment>>,
+        spineHrefs: List<String>,
+        localExtractedFiles: Map<String, File>,
+        outputSegments: MutableList<ClipSegment>,
+        outputOffsets: MutableMap<String, Long>
+    ) {
+        var cumulativeOffset = 0L
+        
+        spineHrefs.forEach { href ->
+            outputOffsets[href!!] = cumulativeOffset
+            
+            val segments = smilData[href] ?: return@forEach
+            var currentClip: ClipSegment? = null
+            
+            segments.forEach { segment ->
+                val audioFile = localExtractedFiles[segment.audioSrc] ?: return@forEach
+                if (!audioFile.exists()) return@forEach
+                
+                val clipBeginMs = (segment.clipBegin * 1000).toLong()
+                val clipEndMs = (segment.clipEnd * 1000).toLong()
+                val durationMs = clipEndMs - clipBeginMs
+                if (durationMs <= 0) return@forEach
+                
+                if (currentClip != null && currentClip!!.audioSrc == segment.audioSrc && 
+                    Math.abs(currentClip!!.clipEndMs - clipBeginMs) < 100) {
+                    
+                    val relativeStart = currentClip!!.clipEndMs - currentClip!!.clipBeginMs
+                    currentClip!!.subSegments.add(SubSegment(segment.id, relativeStart, durationMs))
+                    currentClip!!.clipEndMs = clipEndMs
+                    cumulativeOffset += durationMs
+                } else {
+                    currentClip = ClipSegment(
+                        elementId = segment.id,
+                        audioSrc = segment.audioSrc,
+                        audioFile = audioFile,
+                        clipBeginMs = clipBeginMs,
+                        clipEndMs = clipEndMs,
+                        cumulativeStartMs = cumulativeOffset,
+                        chapterIndex = spineHrefs.indexOf(href)
+                    ).apply {
+                        subSegments.add(SubSegment(segment.id, 0, durationMs))
+                    }
+                    outputSegments.add(currentClip!!)
+                    cumulativeOffset += durationMs
+                }
+            }
+        }
+    }
+    
+    private val hrefToAudioOffset = mutableMapOf<String, Long>()
+    
+    private fun createChaptersList(
+        chapterOffsets: Map<String, Long>, 
+        spineHrefs: List<String>, 
+        spineTitles: Map<String, String>,
+        totalDuration: Long
+    ): List<Chapter> {
+        val chapterList = mutableListOf<Chapter>()
+        
+        val sortedChapters = chapterOffsets.entries.sortedBy { it.value }
+        sortedChapters.forEachIndexed { index, entry ->
+            val startMs = entry.value
+            val nextStartMs = if (index + 1 < sortedChapters.size) {
+                sortedChapters[index + 1].value
+            } else {
+                totalDuration
+            }
+            val durationMs = nextStartMs - startMs
+            
+            val chapterTitle = spineTitles[entry.key] ?: entry.key.substringAfterLast("/").substringBeforeLast(".")
+            
+            chapterList.add(Chapter(chapterTitle, startMs, durationMs))
+        }
+        
+        return chapterList
+    }
+    
+    private suspend fun loadProgress(bookId: String) {
+        val progressStr = repository.getBookProgress(bookId).first()
+        val progress = UnifiedProgress.fromString(progressStr)
+        
+        progress?.let {
+            val audioMs = it.audioTimestampMs
+            android.util.Log.d("ReadAloudAudioVM", "Found saved progress: $audioMs ms, element: ${it.elementId}")
+            
+            if (audioMs < 0) {
+                android.util.Log.w("ReadAloudAudioVM", "Invalid negative timestamp ($audioMs ms), resetting to 0")
+                withContext(Dispatchers.Main) {
+                    pendingSeekPosition = 0
+                    currentPosition = 0
+                }
+                return@let
+            }
+            
+            if (audioMs > duration && duration > 0) {
+                android.util.Log.w("ReadAloudAudioVM", "Saved progress ($audioMs ms) exceeds clip duration ($duration ms), resetting to 0")
+                withContext(Dispatchers.Main) {
+                    pendingSeekPosition = 0
+                    currentPosition = 0
+                }
+            } else if (audioMs > 0) {
+                val validMs = audioMs.coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
+                android.util.Log.d("ReadAloudAudioVM", "Will seek to saved progress: $validMs ms")
+                withContext(Dispatchers.Main) {
+                    pendingSeekPosition = validMs
+                    currentPosition = validMs
+                }
+            } else {
+                val chapterIndex = it.chapterIndex
+                val scrollPercent = it.scrollPercent
+                if (chapterIndex in chapters.indices) {
+                    val chapter = chapters[chapterIndex]
+                    val offset = (chapter.duration * scrollPercent).toLong()
+                    val resMs = (chapter.startOffset + offset).coerceIn(0L, duration)
+                    android.util.Log.d("ReadAloudAudioVM", "Will seek to calculated chapter progress: $resMs ms (Ch $chapterIndex @ ${scrollPercent * 100}%)")
+                    withContext(Dispatchers.Main) {
+                        pendingSeekPosition = resMs
+                        currentPosition = resMs
+                    }
+                } else {
+                    android.util.Log.d("ReadAloudAudioVM", "Starting from beginning")
+                }
+            }
+            Unit
+        }
+    }
+
+    fun setSpeed(speed: Float) {
+        playbackSpeed = speed
+        player?.setPlaybackSpeed(speed)
+        viewModelScope.launch {
+            val bookId = currentBook?.id ?: return@launch
+            repository.saveBookPlaybackSpeed(bookId, speed)
+        }
+    }
+
+    fun skipToChapter(index: Int) {
+        if (index in chapters.indices) {
+            seekTo(chapters[index].startOffset)
+        }
+    }
+
+    fun togglePlayPause() {
+        if (isPlaying) {
+            pause()
+        } else {
+            play()
+        }
+    }
+
+    fun play() {
+        player?.play()
+    }
+
+    fun pause() {
+        player?.pause()
+        saveBookProgress()
+    }
+    
+    fun seekToElement(elementId: String) {
+        var foundPosition: Long? = null
+        
+        for (clip in clipSegments) {
+            if (clip.elementId == elementId) {
+                foundPosition = clip.cumulativeStartMs
+                break
+            }
+            
+            val sub = clip.subSegments.find { it.elementId == elementId }
+            if (sub != null) {
+                foundPosition = clip.cumulativeStartMs + sub.relativeStartMs
+                break
+            }
+        }
+        
+        if (foundPosition != null) {
+             android.util.Log.d("ReadAloudAudioVM", "Seeking to element $elementId at $foundPosition ms")
+             seekTo(foundPosition)
+        } else {
+             android.util.Log.w("ReadAloudAudioVM", "Element $elementId not found in timeline")
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        val player = player ?: return
+        
+        val validPosition = positionMs.coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
+        
+        if (validPosition != positionMs) {
+            android.util.Log.w("ReadAloudAudioVM", "Clamped seek position from $positionMs to $validPosition (duration: $duration)")
+        }
+        
+        val clipIndex = clipSegments.indexOfFirst { clip ->
+            val clipDur = clip.clipEndMs - clip.clipBeginMs
+            validPosition >= clip.cumulativeStartMs && 
+            validPosition < clip.cumulativeStartMs + clipDur
+        }
+        
+        if (clipIndex >= 0) {
+            val clip = clipSegments[clipIndex]
+            val offsetInClip = validPosition - clip.cumulativeStartMs
+            
+            android.util.Log.d("ReadAloudAudioVM", "Seeking to book position $validPosition ms -> Clip #$clipIndex at $offsetInClip ms")
+            
+            player.seekTo(clipIndex, offsetInClip)
+            currentPosition = validPosition
+            currentElementId = clip.elementId
+        } else if (validPosition <= 0) {
+            player.seekTo(0, 0)
+            currentPosition = 0
+        } else if (validPosition >= duration) {
+            if (clipSegments.isNotEmpty()) {
+                val lastIdx = clipSegments.size - 1
+                val lastClip = clipSegments[lastIdx]
+                player.seekTo(lastIdx, lastClip.clipEndMs - lastClip.clipBeginMs - 1)
+            }
+        }
+    }
+
+    fun rewind10s() {
+        val newPos = (currentPosition - 10000).coerceAtLeast(0)
+        seekTo(newPos)
+    }
+
+    fun forward30s() {
+        val newPos = (currentPosition + 30000).coerceAtMost(duration)
+        seekTo(newPos)
+    }
+
+    private fun startProgressUpdate() {
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            var lastSaveTime = 0L
+            while (isActive) {
+                try {
+                    player?.let { p ->
+                        val index = p.currentMediaItemIndex
+                        val posInClip = p.currentPosition
+                        
+                        val currentSegments = clipSegments
+                        if (index >= 0 && index < currentSegments.size) {
+                            val clip = currentSegments[index]
+                            currentPosition = clip.cumulativeStartMs + posInClip
+                            currentChapterIndex = clip.chapterIndex
+                            
+                            val subMatch = clip.subSegments.find { 
+                                posInClip >= it.relativeStartMs && posInClip < it.relativeStartMs + it.durationMs 
+                            }
+                            if (currentElementId != (subMatch?.elementId ?: clip.elementId)) {
+                                currentElementId = subMatch?.elementId ?: clip.elementId
+                                android.util.Log.d("ReadAloudAudioVM", "Element changed: $currentElementId at $currentPosition ms")
+                            }
+                        }
+                    }
+                    
+                    if (duration <= 0 && player?.duration ?: 0 > 0 && clipSegments.isNotEmpty()) {
+                        duration = player?.duration ?: 0
+                    }
+                    
+                    if (isPlaying) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastSaveTime > 5000) { 
+                            saveBookProgress()
+                            lastSaveTime = now
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.e("ReadAloudAudioVM", "Error in progress update loop", e)
+                }
+                delay(100)
+            }
+        }
+    }
+
+    fun applyDefaultSleepTimer() {
+        viewModelScope.launch {
+            val settings = repository.userSettings.first()
+            sleepTimerFinishChapter = settings.sleepTimerFinishChapter
+            if (settings.sleepTimerMinutes > 0) {
+                setSleepTimer(settings.sleepTimerMinutes)
+            }
+        }
+    }
+    
+    fun toggleSleepTimerFinishChapter() {
+        sleepTimerFinishChapter = !sleepTimerFinishChapter
+        viewModelScope.launch {
+            repository.updateSleepTimerFinishChapter(sleepTimerFinishChapter)
+        }
+    }
+
+    var isWaitingForChapterEnd by mutableStateOf(false)
+    
+    fun setSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        isWaitingForChapterEnd = false
+        if (minutes <= 0) {
+            sleepTimerRemaining = 0L
+            return
+        }
+        sleepTimerRemaining = minutes * 60 * 1000L
+        
+        sleepTimerJob = viewModelScope.launch {
+            while (sleepTimerRemaining > 0) {
+                delay(1000)
+                if (isPlaying) {
+                    sleepTimerRemaining -= 1000
+                    if (sleepTimerRemaining <= 0) {
+                        if (sleepTimerFinishChapter) {
+                            android.util.Log.d("ReadAloudAudioVM", "Sleep timer expired, waiting for end of chapter...")
+                            isWaitingForChapterEnd = true
+                            val startingChapter = currentChapterIndex
+                            while (isPlaying && currentChapterIndex == startingChapter && currentPosition < duration - 2000) {
+                                delay(1000)
+                            }
+                        }
+                        player?.pause()
+                        sleepTimerRemaining = 0
+                        isWaitingForChapterEnd = false
+                    }
+                }
+            }
+        }
+    }
+
+    fun confirmSync() {
+        syncConfirmation?.let {
+            seekTo(it.newPositionMs)
+            syncConfirmation = null
+        }
+    }
+
+    fun dismissSync() {
+        syncConfirmation = null
+    }
+
+    internal fun saveBookProgress() {
+        val bookId = currentBook?.id ?: ""
+        val pos = currentPosition
+        val dur = duration
+        if (bookId.isEmpty() || dur <= 0) return
+
+        viewModelScope.launch {
+            val chIdx = currentChapterIndex
+            val chList = chapters
+            val elemId = currentElementId
+            
+            val chapter = chList.getOrNull(chIdx)
+            val chapterProgress = if (chapter != null && chapter.duration > 0) {
+                (pos - chapter.startOffset).toFloat() / chapter.duration
+            } else 0f
+            
+            val progress = com.pekempy.ReadAloudbooks.data.UnifiedProgress(
+                chapterIndex = chIdx.coerceAtLeast(0),
+                elementId = elemId,
+                audioTimestampMs = pos,
+                scrollPercent = chapterProgress,
+                lastUpdated = System.currentTimeMillis(),
+                totalChapters = chList.size,
+                totalDurationMs = dur
+            )
+            repository.saveBookProgress(bookId, progress.toString())
+        }
+    }
+
+    fun stopPlayback() {
+        val bookId = currentBook?.id ?: ""
+        val pos = currentPosition
+        val dur = duration
+        val chIdx = currentChapterIndex
+        val chList = chapters
+        val elemId = currentElementId
+        
+        if (bookId.isNotEmpty() && dur > 0) {
+            saveBookProgress()
+            viewModelScope.launch {
+                repository.saveLastActiveBook("", "")
+            }
+        }
+
+        player?.let {
+            it.pause()
+            it.stop()
+            it.clearMediaItems()
+        }
+        
+        currentBook = null
+        currentPosition = 0
+        duration = 0
+        chapters = emptyList()
+        currentChapterIndex = -1
+        currentElementId = null
+        progressJob?.cancel()
+        sleepTimerJob?.cancel()
+        sleepTimerRemaining = 0
+        clipSegments.clear()
+        
+        try {
+            currentZipFile?.close()
+            currentZipFile = null
+        } catch (e: Exception) {}
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        controllerFuture?.let {
+            MediaController.releaseFuture(it)
+        }
+        player = null
+        progressJob?.cancel()
+        sleepTimerJob?.cancel()
+        
+        try {
+            currentZipFile?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+

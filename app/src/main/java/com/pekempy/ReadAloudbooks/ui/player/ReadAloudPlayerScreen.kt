@@ -1,0 +1,691 @@
+package com.pekempy.ReadAloudbooks.ui.player
+
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.ImageLoader
+import com.pekempy.ReadAloudbooks.data.api.AppContainer
+import com.pekempy.ReadAloudbooks.ui.reader.*
+import com.pekempy.ReadAloudbooks.ui.player.AudiobookViewModel
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import com.pekempy.ReadAloudbooks.util.FormatUtils
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import kotlin.math.roundToInt
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReadAloudPlayerScreen(
+    readerViewModel: ReaderViewModel,
+    readAloudAudioViewModel: ReadAloudAudioViewModel,
+    bookId: String,
+    initiallyExpanded: Boolean = false,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val userSettings = readerViewModel.settings
+    var isPlayerExpanded by remember { mutableStateOf(initiallyExpanded) }
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showSpeedSheet by remember { mutableStateOf(false) }
+    var showChaptersSheet by remember { mutableStateOf(false) }
+    var showSearchSheet by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(bookId) {
+        readerViewModel.loadEpub(bookId, isReadAloud = true)
+        readAloudAudioViewModel.initializePlayer(context)
+    }
+    
+    val highlightId = readAloudAudioViewModel.currentElementId
+    LaunchedEffect(highlightId) {
+        if (highlightId != null && readerViewModel.currentHighlightId != highlightId) {
+            readerViewModel.currentHighlightId = highlightId
+            readerViewModel.forceScrollUpdate()
+        }
+    }
+
+    LaunchedEffect(readAloudAudioViewModel.currentPosition) {
+        readerViewModel.currentAudioPos = readAloudAudioViewModel.currentPosition
+    }
+
+    LaunchedEffect(readerViewModel.syncData, readerViewModel.chapterOffsets) {
+        if (readerViewModel.syncData.isNotEmpty()) {
+            val spineHrefs = readerViewModel.lazyBook?.spineHrefs ?: emptyList()
+            readAloudAudioViewModel.loadBook(
+                bookId = bookId,
+                smilData = readerViewModel.syncData,
+                chapterOffsets = readerViewModel.chapterOffsets,
+                spineHrefs = spineHrefs,
+                spineTitles = readerViewModel.lazyBook?.spineTitles ?: emptyMap()
+            )
+        }
+    }
+
+    LaunchedEffect(readAloudAudioViewModel.currentChapterIndex) {
+        val audioCh = readAloudAudioViewModel.currentChapterIndex
+        if (audioCh >= 0 && audioCh != readerViewModel.currentChapterIndex) {
+            readerViewModel.changeChapter(audioCh, readAloudAudioViewModel.currentPosition)
+        }
+    }
+
+
+    
+    LaunchedEffect(readerViewModel.jumpToElementRequest.value) {
+        readerViewModel.jumpToElementRequest.value?.let { elementId ->
+            readAloudAudioViewModel.seekToElement(elementId)
+            readerViewModel.jumpToElementRequest.value = null
+        }
+    }
+
+    if (readerViewModel.isLoading || readAloudAudioViewModel.isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+    } else if (readerViewModel.error != null) {
+        AlertDialog(
+            onDismissRequest = onBack,
+            title = { Text("Error Opening Book") },
+            text = { Text(readerViewModel.error ?: "Unknown error") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        readerViewModel.redownloadBook(context)
+                        onBack()
+                    }
+                ) {
+                    Text("Redownload")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onBack) {
+                    Text("Go Back")
+                }
+            }
+        )
+    } else if (readAloudAudioViewModel.error != null) {
+        AlertDialog(
+            onDismissRequest = onBack,
+            title = { Text("Error Opening Audio") },
+            text = { Text(readAloudAudioViewModel.error ?: "Unknown error") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        readerViewModel.redownloadBook(context)
+                        onBack()
+                    }
+                ) {
+                    Text("Redownload")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onBack) {
+                    Text("Go Back")
+                }
+            }
+        )
+    }
+
+    readAloudAudioViewModel.syncConfirmation?.let { sync ->
+        AlertDialog(
+            onDismissRequest = { readAloudAudioViewModel.dismissSync() },
+            title = { Text("Progress Sync") },
+            text = { 
+                Text("Progress detected at ${"%.1f".format(sync.progressPercent)}% from ${sync.source}. Do you want to use this?")
+            },
+            confirmButton = {
+                Button(onClick = { readAloudAudioViewModel.confirmSync() }) {
+                    Text("Use Progress")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { readAloudAudioViewModel.dismissSync() }) {
+                    Text("Ignore")
+                }
+            }
+        )
+    }
+
+    readerViewModel.syncConfirmation?.let { sync ->
+        AlertDialog(
+            onDismissRequest = { readerViewModel.dismissSync() },
+            title = { Text("Progress Sync") },
+            text = { 
+                Text("Progress detected at ${"%.1f".format(sync.progressPercent)}% from ${sync.source}. Do you want to use this?")
+            },
+            confirmButton = {
+                Button(onClick = { readerViewModel.confirmSync() }) {
+                    Text("Use Progress")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { readerViewModel.dismissSync() }) {
+                    Text("Ignore")
+                }
+            }
+        )
+    }
+
+    if (userSettings != null && readerViewModel.totalChapters > 0) {
+        val theme = getReaderTheme(userSettings.readerTheme)
+        val accentColor = MaterialTheme.colorScheme.primary
+        val accentHex = String.format("#%06X", (0xFFFFFF and accentColor.toArgb()))
+        
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(theme.bgInt))
+        ) {
+            EpubWebView(
+                html = readerViewModel.getCurrentChapterHtml() ?: "",
+                userSettings = userSettings,
+                viewModel = readerViewModel,
+                accentHex = accentHex,
+                highlightId = if (readerViewModel.activeSearchHighlight == null) readerViewModel.currentHighlightId else null,
+                syncTrigger = readerViewModel.syncTrigger,
+                activeSearch = readerViewModel.activeSearchHighlight,
+                activeSearchMatchIndex = readerViewModel.activeSearchMatchIndex,
+                pendingAnchor = readerViewModel.pendingAnchorId.value,
+                onTap = {  }
+            )
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(theme.bgInt).copy(alpha = 0.95f))
+                    .statusBarsPadding()
+                    .height(40.dp)
+                    .padding(horizontal = 4.dp)
+                    .align(Alignment.TopCenter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.Default.KeyboardArrowDown, 
+                        contentDescription = "Back",
+                        tint = Color(theme.textInt)
+                    )
+                }
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (readAloudAudioViewModel.sleepTimerRemaining > 0 || readAloudAudioViewModel.isWaitingForChapterEnd) {
+                        Text(
+                            text = if (readAloudAudioViewModel.isWaitingForChapterEnd) "Stopping at end of chapter" else FormatUtils.formatSleepTime(readAloudAudioViewModel.sleepTimerRemaining),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(theme.textInt),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
+                    IconButton(onClick = { 
+                        if (readAloudAudioViewModel.isPlaying) readAloudAudioViewModel.togglePlayPause()
+                        readerViewModel.clearSearch()
+                        showSearchSheet = true 
+                    }) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Color(theme.textInt)
+                        )
+                    }
+                    IconButton(onClick = { 
+                        if (readAloudAudioViewModel.sleepTimerRemaining <= 0) {
+                            readAloudAudioViewModel.applyDefaultSleepTimer()
+                        }
+                        showSleepTimerSheet = true 
+                    }) {
+                        Icon(
+                            if (readAloudAudioViewModel.sleepTimerRemaining > 0) Icons.Default.Snooze else Icons.Default.Bedtime,
+                            contentDescription = "Sleep Timer",
+                            tint = Color(theme.textInt)
+                        )
+                    }
+                    IconButton(onClick = { readerViewModel.showControls = !readerViewModel.showControls }) {
+                        Icon(
+                            Icons.Default.Settings, 
+                            contentDescription = "Preferences",
+                            tint = Color(theme.textInt)
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = !isPlayerExpanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+            ) {
+                Column {
+                    AnimatedVisibility(
+                        visible = readerViewModel.showControls,
+                        enter = slideInVertically { it },
+                        exit = slideOutVertically { it }
+                    ) {
+                        ReaderControls(
+                            userSettings = userSettings,
+                            currentChapter = readerViewModel.currentChapterIndex,
+                            totalChapters = readerViewModel.totalChapters,
+                            onFontSizeChange = readerViewModel::updateFontSize,
+                            onThemeChange = readerViewModel::updateTheme,
+                            onFontFamilyChange = readerViewModel::updateFontFamily,
+                            onChapterChange = readerViewModel::changeChapter,
+                            backgroundColor = Color(theme.bgInt).copy(alpha = 0.95f),
+                            contentColor = Color(theme.textInt)
+                        )
+                    }
+                    ReadAloudMinimalCard(
+                        audiobookViewModel = readAloudAudioViewModel,
+                        theme = theme,
+                        onClick = { isPlayerExpanded = true }
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isPlayerExpanded,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it }
+            ) {
+                ReadAloudFullPlayerOverlay(
+                    viewModel = readAloudAudioViewModel,
+                    onClose = { isPlayerExpanded = false },
+                    onShowSpeed = { showSpeedSheet = true },
+                    onShowChapters = { showChaptersSheet = true },
+                    onShowSleep = { showSleepTimerSheet = true }
+                )
+            }
+        }
+
+        if (showSpeedSheet) {
+            ModalBottomSheet(onDismissRequest = { showSpeedSheet = false }) {
+                AudioSpeedContent(viewModel = readAloudAudioViewModel)
+            }
+        }
+
+        if (showSleepTimerSheet) {
+            ModalBottomSheet(onDismissRequest = { showSleepTimerSheet = false }) {
+                SleepTimerContent(viewModel = readAloudAudioViewModel)
+            }
+        }
+
+        if (showChaptersSheet) {
+            ModalBottomSheet(onDismissRequest = { showChaptersSheet = false }) {
+                ChaptersContent(viewModel = readAloudAudioViewModel)
+            }
+        }
+        
+        if (showSearchSheet) {
+            ModalBottomSheet(onDismissRequest = { showSearchSheet = false }) {
+                SearchContent(
+                    viewModel = readerViewModel,
+                    onResultClick = { result, query ->
+                        readerViewModel.navigateToSearchResult(result, query)
+                        showSearchSheet = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchContent(
+    viewModel: ReaderViewModel,
+    onResultClick: (ReaderViewModel.SearchResult, String) -> Unit
+) {
+    var query by remember { mutableStateOf(viewModel.activeSearchHighlight ?: "") }
+    
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Text("Search in Book", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+        
+        OutlinedTextField(
+            value = query,
+            onValueChange = { 
+                query = it
+                viewModel.search(it)
+            },
+            label = { Text("Search") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { 
+                        query = ""
+                        viewModel.clearSearch()
+                    }) { Icon(Icons.Default.Clear, null) }
+                }
+            }
+        )
+        
+        Spacer(Modifier.height(16.dp))
+        
+        if (viewModel.isSearching) {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (viewModel.searchResults.isEmpty() && query.length >= 2) {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text("No matches found", color = MaterialTheme.colorScheme.secondary)
+            }
+        } else {
+            LazyColumn {
+                itemsIndexed(viewModel.searchResults) { index, result ->
+                    ListItem(
+                        headlineContent = { Text(result.title) },
+                        supportingContent = { 
+                            Text(
+                                result.textSnippet, 
+                                maxLines = 3, 
+                                overflow = TextOverflow.Ellipsis
+                            ) 
+                        },
+                        modifier = Modifier.clickable {
+                            onResultClick(result, query)
+                        }
+                    )
+                    HorizontalDivider()
+                }
+            }
+        }
+        Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+fun AudioSpeedContent(viewModel: ReadAloudAudioViewModel) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Playback Speed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        Text("${"%.2f".format(viewModel.playbackSpeed)}x", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+        Slider(
+            value = viewModel.playbackSpeed,
+            onValueChange = { viewModel.setSpeed((it * 20).roundToInt() / 20f) },
+            valueRange = 0.5f..2.0f,
+            steps = 29
+        )
+        Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+fun SleepTimerContent(viewModel: ReadAloudAudioViewModel) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Sleep Timer", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        val selectedMinutes = if (viewModel.sleepTimerRemaining > 0) (viewModel.sleepTimerRemaining / 60000).toInt() else 0
+        Text(if (selectedMinutes > 0) "$selectedMinutes minutes" else "Off", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+        Slider(
+            value = selectedMinutes.toFloat(),
+            onValueChange = { viewModel.setSleepTimer(it.roundToInt()) },
+            valueRange = 0f..120f,
+            steps = 119
+        )
+        
+        Spacer(Modifier.height(8.dp))
+        
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { viewModel.toggleSleepTimerFinishChapter() }
+                .padding(vertical = 12.dp)
+        ) {
+            Text(
+                "Play until end of chapter",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = viewModel.sleepTimerFinishChapter,
+                onCheckedChange = { viewModel.toggleSleepTimerFinishChapter() }
+            )
+        }
+        TextButton(onClick = { viewModel.setSleepTimer(0) }) { Text("Turn Off") }
+        Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+fun ChaptersContent(viewModel: ReadAloudAudioViewModel) {
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Text("Chapters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+        if (viewModel.chapters.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                Text("No internal chapters found", color = MaterialTheme.colorScheme.secondary)
+            }
+        } else {
+            LazyColumn {
+                itemsIndexed(viewModel.chapters) { index, chapter ->
+                    ListItem(
+                        headlineContent = { Text(chapter.title) },
+                        supportingContent = { Text(FormatUtils.formatTime(chapter.startOffset)) },
+                        trailingContent = { Text(FormatUtils.formatTime(chapter.duration)) },
+                        modifier = Modifier.clickable {
+                            viewModel.skipToChapter(index)
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = if (viewModel.currentPosition in chapter.startOffset..(chapter.startOffset + chapter.duration)) 
+                                MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        )
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+fun ReadAloudFullPlayerOverlay(
+    viewModel: ReadAloudAudioViewModel,
+    onClose: () -> Unit,
+    onShowSpeed: () -> Unit,
+    onShowChapters: () -> Unit,
+    onShowSleep: () -> Unit
+) {
+    val book = viewModel.currentBook
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.Start)) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close")
+            }
+            
+            Box(modifier = Modifier.weight(1f).padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                Card(
+                    modifier = Modifier.aspectRatio(1f).fillMaxWidth(0.8f),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    AsyncImage(
+                        model = book?.coverUrl ?: book?.audiobookCoverUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+            
+            Text(book?.title ?: "Unknown", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(book?.author ?: "Unknown", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
+            
+            Spacer(Modifier.height(24.dp))
+            
+            Slider(
+                value = if (viewModel.duration > 0) viewModel.currentPosition.toFloat() else 0f,
+                onValueChange = { viewModel.seekTo(it.toLong()) },
+                valueRange = 0f..(if (viewModel.duration > 0) viewModel.duration.toFloat() else 1f)
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(FormatUtils.formatTime(viewModel.currentPosition), style = MaterialTheme.typography.labelMedium)
+                Text(FormatUtils.formatTime(viewModel.duration), style = MaterialTheme.typography.labelMedium)
+            }
+            
+            Spacer(Modifier.height(24.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { viewModel.rewind10s() }) { Icon(Icons.Default.Replay10, null, Modifier.size(32.dp)) }
+                IconButton(onClick = { viewModel.togglePlayPause() }, modifier = Modifier.size(72.dp)) {
+                    Icon(if (viewModel.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, Modifier.size(48.dp))
+                }
+                IconButton(onClick = { viewModel.forward30s() }) { Icon(Icons.Default.Forward30, null, Modifier.size(32.dp)) }
+            }
+            
+            Spacer(Modifier.height(32.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = onShowSpeed) { Text("${"%.2f".format(viewModel.playbackSpeed)}x Speed") }
+                IconButton(onClick = onShowChapters) { Icon(Icons.Default.List, null) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReadAloudMinimalCard(
+    audiobookViewModel: ReadAloudAudioViewModel,
+    theme: ReaderThemeData,
+    onClick: () -> Unit
+) {
+    val book = audiobookViewModel.currentBook
+    val context = LocalContext.current
+    val imageLoader = remember {
+        val client = AppContainer.apiClientManager.okHttpClient 
+            ?: return@remember ImageLoader(context)
+        ImageLoader.Builder(context)
+            .okHttpClient(client)
+            .build()
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(24.dp),
+        color = Color(theme.bgInt).copy(alpha = 0.95f),
+        border = BorderStroke(1.dp, Color(theme.textInt).copy(alpha = 0.1f)),
+        tonalElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = book?.audiobookCoverUrl ?: book?.coverUrl,
+                imageLoader = imageLoader,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            
+            Spacer(Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = book?.title ?: "Unknown",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(theme.textInt),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                
+                Spacer(Modifier.height(4.dp))
+                
+                val progress = if (audiobookViewModel.duration > 0) 
+                    audiobookViewModel.currentPosition.toFloat() / audiobookViewModel.duration 
+                else 0f
+                
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color(theme.textInt).copy(alpha = 0.1f)
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = com.pekempy.ReadAloudbooks.util.FormatUtils.formatTime(audiobookViewModel.currentPosition),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(theme.textInt).copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = com.pekempy.ReadAloudbooks.util.FormatUtils.formatTime(audiobookViewModel.duration),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(theme.textInt).copy(alpha = 0.7f)
+                    )
+                }
+            }
+            
+            Spacer(Modifier.width(16.dp))
+            
+            FilledIconButton(
+                onClick = { audiobookViewModel.togglePlayPause() },
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            ) {
+                Icon(
+                    if (audiobookViewModel.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = "Play/Pause"
+                )
+            }
+        }
+    }
+}
+
+
