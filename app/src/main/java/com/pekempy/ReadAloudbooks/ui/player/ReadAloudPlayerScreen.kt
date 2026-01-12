@@ -58,8 +58,6 @@ fun ReadAloudPlayerScreen(
     val highlightId = readAloudAudioViewModel.currentElementId
     
     LaunchedEffect(highlightId) {
-        delay(200)
-        
         if (highlightId != null && readerViewModel.currentHighlightId != highlightId) {
             readerViewModel.currentHighlightId = highlightId
             readerViewModel.forceScrollUpdate()
@@ -67,7 +65,9 @@ fun ReadAloudPlayerScreen(
     }
 
     LaunchedEffect(readAloudAudioViewModel.currentPosition) {
-        readerViewModel.currentAudioPos = readAloudAudioViewModel.currentPosition
+        if (!readAloudAudioViewModel.isLoading && readAloudAudioViewModel.currentPosition > 0) {
+            readerViewModel.currentAudioPos = readAloudAudioViewModel.currentPosition
+        }
     }
 
     LaunchedEffect(readerViewModel.syncData, readerViewModel.chapterOffsets) {
@@ -157,16 +157,22 @@ fun ReadAloudPlayerScreen(
             onDismissRequest = { readAloudAudioViewModel.dismissSync() },
             title = { Text("Progress Sync") },
             text = { 
-                Text("Progress detected at ${"%.1f".format(sync.progressPercent)}% from ${sync.source}. Do you want to use this?")
+                Text("Progress is out of sync with Storyteller.")
             },
             confirmButton = {
-                Button(onClick = { readAloudAudioViewModel.confirmSync() }) {
-                    Text("Use Progress")
+                Button(
+                    onClick = { readAloudAudioViewModel.confirmSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use server (${"%.1f".format(sync.progressPercent)}%)")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { readAloudAudioViewModel.dismissSync() }) {
-                    Text("Ignore")
+                TextButton(
+                    onClick = { readAloudAudioViewModel.dismissSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use local (${"%.1f".format(sync.localProgressPercent)}%)")
                 }
             }
         )
@@ -177,16 +183,22 @@ fun ReadAloudPlayerScreen(
             onDismissRequest = { readerViewModel.dismissSync() },
             title = { Text("Progress Sync") },
             text = { 
-                Text("Progress detected at ${"%.1f".format(sync.progressPercent)}% from ${sync.source}. Do you want to use this?")
+                Text("Progress is out of sync with Storyteller.")
             },
             confirmButton = {
-                Button(onClick = { readerViewModel.confirmSync() }) {
-                    Text("Use Progress")
+                Button(
+                    onClick = { readerViewModel.confirmSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use server (${"%.1f".format(sync.progressPercent)}%)")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { readerViewModel.dismissSync() }) {
-                    Text("Ignore")
+                TextButton(
+                    onClick = { readerViewModel.dismissSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use local (${"%.1f".format(sync.localProgressPercent)}%)")
                 }
             }
         )

@@ -284,34 +284,36 @@ fun BookActionMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest
     ) {
-        if (book.hasEbook) {
-            DropdownMenuItem(
-                text = { Text("Read eBook") },
-                leadingIcon = { Icon(painterResource(R.drawable.ic_menu_book), contentDescription = null) },
-                onClick = { 
-                    onReadEbook(book)
-                    onDismissRequest()
-                }
-            )
-        }
         if (book.hasReadAloud) {
             DropdownMenuItem(
-                text = { Text("Play ReadAloud") },
+                text = { Text("Read & Listen") },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_menu_book), contentDescription = null) },
                 onClick = {
                     onPlayReadAloud(book)
                     onDismissRequest()
                 }
             )
-        } else if (book.hasAudiobook) {
-            DropdownMenuItem(
-                text = { Text("Play Audiobook") },
-                leadingIcon = { Icon(painterResource(R.drawable.ic_headphones), contentDescription = null) },
-                onClick = {
-                    onPlayAudiobook(book)
-                    onDismissRequest()
-                }
-            )
+        } else {
+            if (book.hasEbook) {
+                DropdownMenuItem(
+                    text = { Text("Read eBook") },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_book), contentDescription = null) },
+                    onClick = { 
+                        onReadEbook(book)
+                        onDismissRequest()
+                    }
+                )
+            }
+            if (book.hasAudiobook) {
+                DropdownMenuItem(
+                    text = { Text("Play Audiobook") },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_headphones), contentDescription = null) },
+                    onClick = {
+                        onPlayAudiobook(book)
+                        onDismissRequest()
+                    }
+                )
+            }
         }
 
         HorizontalDivider()

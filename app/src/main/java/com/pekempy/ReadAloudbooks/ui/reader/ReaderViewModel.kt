@@ -14,11 +14,19 @@ import java.io.FileInputStream
 import android.webkit.WebResourceResponse
 import com.pekempy.ReadAloudbooks.data.Book
 import com.pekempy.ReadAloudbooks.data.api.Position
+import com.pekempy.ReadAloudbooks.data.api.Locator
+import com.pekempy.ReadAloudbooks.data.api.Locations
 import com.pekempy.ReadAloudbooks.util.DownloadUtils
 
 class ReaderViewModel(
     private val repository: UserPreferencesRepository
 ) : ViewModel() {
+    private var lastSyncedProgress: com.pekempy.ReadAloudbooks.data.UnifiedProgress? = null
+    private var readerInitialized = false
+    
+    fun markReady() {
+        readerInitialized = true
+    }
 
     data class LazyBook(
         val title: String,
@@ -63,6 +71,7 @@ class ReaderViewModel(
         val newAudioMs: Long?,
         val newElementId: String?,
         val progressPercent: Float,
+        val localProgressPercent: Float,
         val source: String
     )
     var syncConfirmation by mutableStateOf<SyncConfirmation?>(null)
@@ -90,17 +99,29 @@ class ReaderViewModel(
                             lastScrollPercent = progress.scrollPercent
                             currentAudioPos = savedAudioMs
                             currentHighlightId = progress.elementId ?: if (savedAudioMs > 0) getElementIdAtTime(savedAudioMs)?.second else null
-                        } else if (kotlin.math.abs(diff) > 5000) {
-                            android.util.Log.d("ReaderViewModel", "Showing sync confirmation for jump: $diff ms")
-                            val resolvedElementId = progress.elementId ?: if (savedAudioMs > 0) getElementIdAtTime(savedAudioMs)?.second else null
-                            syncConfirmation = SyncConfirmation(
-                                newChapterIndex = savedChapter,
-                                newScrollPercent = progress.scrollPercent,
-                                newAudioMs = savedAudioMs,
-                                newElementId = resolvedElementId,
-                                progressPercent = (savedAudioMs.toFloat() / (if (totalChapters > 0) totalChapters else 1)) * 100,
-                                source = "another device"
-                            )
+                        } else {
+                            val serverPercent = (progress.getOverallProgress() * 100).coerceIn(0f, 100f)
+                            val localPercent = (((currentChapterIndex + lastScrollPercent) / totalChapters.coerceAtLeast(1)) * 100).coerceIn(0f, 100f)
+                            
+                            if (kotlin.math.abs(serverPercent - localPercent) > 5f) {
+                                android.util.Log.d("ReaderViewModel", "Showing sync confirmation for significant jump ($serverPercent% vs $localPercent%)")
+                                val resolvedElementId = progress.elementId ?: if (savedAudioMs > 0) getElementIdAtTime(savedAudioMs)?.second else null
+                                syncConfirmation = SyncConfirmation(
+                                    newChapterIndex = savedChapter,
+                                    newScrollPercent = progress.scrollPercent,
+                                    newAudioMs = savedAudioMs,
+                                    newElementId = resolvedElementId,
+                                    progressPercent = serverPercent,
+                                    localProgressPercent = localPercent,
+                                    source = "another device"
+                                )
+                            } else {
+                                android.util.Log.d("ReaderViewModel", "Auto-syncing minor jump ($serverPercent% vs $localPercent%)")
+                                currentChapterIndex = savedChapter
+                                lastScrollPercent = progress.scrollPercent
+                                currentAudioPos = savedAudioMs
+                                currentHighlightId = progress.elementId ?: if (savedAudioMs > 0) getElementIdAtTime(savedAudioMs)?.second else null
+                            }
                         }
                     }
                 }
@@ -109,6 +130,14 @@ class ReaderViewModel(
         }
         currentBookId = bookId
         isReadAloudMode = isReadAloud
+        currentChapterIndex = 0
+        lastScrollPercent = 0f
+        currentAudioPos = 0L
+        currentHighlightId = null
+        isLoading = true
+        readerInitialized = false
+        syncData = emptyMap()
+        chapterOffsets = emptyMap()
         
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -299,28 +328,54 @@ class ReaderViewModel(
                             android.util.Log.d("ReaderSync", "Progress remaining on Chapter Index: $currentChapterIndex")
                         }
                         
-                        try {
-                            val serverPos = AppContainer.apiClientManager.getApi().getPosition(bookId)
-                            if (serverPos != null) {
-                                val serverProgress = UnifiedProgress.fromString(serverPos.location)
+                                try {
+                                    val serverPos = AppContainer.apiClientManager.getApi().getPosition(bookId)
+                                    if (serverPos != null) {
+                                        val serverHref = serverPos.locator.href
+                                        val chapterIdxFromHref = lazyBook?.spineHrefs?.indexOfFirst { it == serverHref || it.endsWith("/$serverHref") || serverHref.endsWith("/$it") }
+                                        
+                                        val serverProgress = UnifiedProgress.fromPosition(serverPos, totalChapters).let {
+                                            val resolvedIdx = serverPos.locator.locations.chapterIndex ?: chapterIdxFromHref
+                                            if (resolvedIdx != null && resolvedIdx >= 0) {
+                                                it.copy(chapterIndex = resolvedIdx)
+                                            } else it
+                                        }
+                                
                                 val localLastUpdated = progress?.lastUpdated ?: 0L
                                 
-                                if (serverProgress != null && serverProgress.lastUpdated > localLastUpdated) {
-                                    android.util.Log.d("ReaderSync", "Found newer server progress: ${serverProgress.lastUpdated} > $localLastUpdated")
+                                if (serverProgress.lastUpdated > localLastUpdated) {
+                                    val localPercent = (((currentChapterIndex + lastScrollPercent) / totalChapters.coerceAtLeast(1)) * 100).coerceIn(0f, 100f)
+                                    val serverPercent = ((serverPos.locator.locations.totalProgression ?: 0.0).toFloat() * 100).coerceIn(0f, 100f)
                                     
-                                    val savedChapter = serverProgress.chapterIndex
-                                    val savedAudioMs = serverProgress.audioTimestampMs
-                                    val resolvedElementId = serverProgress.elementId ?: if (savedAudioMs > 0) getElementIdAtTime(savedAudioMs)?.second else null
-                                    
-                                    withContext(Dispatchers.Main) {
-                                        syncConfirmation = SyncConfirmation(
-                                            newChapterIndex = savedChapter,
-                                            newScrollPercent = serverProgress.scrollPercent,
-                                            newAudioMs = savedAudioMs,
-                                            newElementId = resolvedElementId,
-                                            progressPercent = serverPos.percentage.toFloat() * 100,
-                                            source = "Storyteller Server"
-                                        )
+                                    if (kotlin.math.abs(serverPercent - localPercent) > 5f) {
+                                        android.util.Log.d("ReaderSync", "Significant progress diff ($serverPercent% vs $localPercent%). Prompting.")
+                                        
+                                        val savedChapter = serverProgress.chapterIndex
+                                        val savedAudioMs = serverProgress.audioTimestampMs
+                                        val resolvedElementId = if (savedAudioMs > 0) getElementIdAtTime(savedAudioMs)?.second else null
+                                        
+                                        withContext(Dispatchers.Main) {
+                                            syncConfirmation = SyncConfirmation(
+                                                newChapterIndex = savedChapter,
+                                                newScrollPercent = serverProgress.scrollPercent,
+                                                newAudioMs = savedAudioMs,
+                                                newElementId = resolvedElementId,
+                                                progressPercent = serverPercent,
+                                                localProgressPercent = localPercent,
+                                                source = "Storyteller Server"
+                                            )
+                                        }
+                                    } else {
+                                        android.util.Log.d("ReaderSync", "Progress diff is minor ($serverPercent% vs $localPercent%). Auto-syncing to Storyteller.")
+                                        // Auto-sync if diff is minor
+                                        withContext(Dispatchers.Main) {
+                                            currentChapterIndex = serverProgress.chapterIndex
+                                            lastScrollPercent = serverProgress.scrollPercent
+                                            if (serverProgress.audioTimestampMs > 0) {
+                                                currentAudioPos = serverProgress.audioTimestampMs
+                                            }
+                                            currentHighlightId = serverProgress.elementId ?: if (serverProgress.audioTimestampMs > 0) getElementIdAtTime(serverProgress.audioTimestampMs)?.second else null
+                                        }
                                     }
                                 }
                             }
@@ -346,6 +401,11 @@ class ReaderViewModel(
     }
 
     fun saveProgress(chapterIndex: Int, scrollPercent: Float, audioPosMs: Long? = null, elementId: String? = null) {
+        if (isLoading || !readerInitialized) {
+            android.util.Log.d("ReaderViewModel", "Ignoring saveProgress: loading=$isLoading, initialized=$readerInitialized")
+            return
+        }
+        
         lastScrollPercent = scrollPercent
         if (elementId != null && !isReadAloudMode) {
             currentHighlightId = elementId
@@ -357,41 +417,83 @@ class ReaderViewModel(
         viewModelScope.launch {
             val bookId = currentBookId ?: return@launch
             
+            val href = lazyBook?.spineHrefs?.getOrNull(chapterIndex) ?: ""
+            
             val actualAudioPos = if (isReadAloudMode) {
                 currentAudioPos
             } else {
-                audioPosMs ?: 0L
+                val elementMs = elementId?.let { (getTimeAtElement(chapterIndex, it) ?: 0.0) * 1000 }?.toLong()
+                
+                if (elementMs != null && elementMs > 0) {
+                    elementMs
+                } else {
+                    val offset = chapterOffsets[href] ?: 0.0
+                    val chapterDur = syncData[href]?.sumOf { it.clipEnd - it.clipBegin } ?: 0.0
+                    ((offset + (chapterDur * scrollPercent)) * 1000).toLong()
+                }
             }
 
-            val finalElementId = elementId ?: if (actualAudioPos > 0) {
-                currentHighlightId ?: getElementIdAtTime(actualAudioPos)?.second
+            val finalElementId = if (isReadAloudMode) {
+                currentHighlightId ?: elementId
             } else {
-                currentHighlightId
+                elementId ?: currentHighlightId ?: if (actualAudioPos > 0) {
+                    getElementIdAtTime(actualAudioPos)?.second
+                } else null
             }
             
+            val mediaType = lazyBook?.mediaTypes?.get(href) ?: "application/xhtml+xml"
+
+            val lastChapterHref = chapterOffsets.entries.maxByOrNull { it.value }?.key
+            val lastChapterDur = syncData[lastChapterHref]?.sumOf { it.clipEnd - it.clipBegin } ?: 0.0
+            val totalAudioDurMs = ((chapterOffsets.values.maxOrNull() ?: 0.0) + lastChapterDur).let { (it * 1000).toLong() }
+
             val progress = UnifiedProgress(
                 chapterIndex = chapterIndex,
                 elementId = finalElementId,
                 audioTimestampMs = actualAudioPos,
                 scrollPercent = scrollPercent,
                 lastUpdated = System.currentTimeMillis(),
-                totalChapters = totalChapters
+                totalChapters = totalChapters,
+                totalDurationMs = totalAudioDurMs,
+                href = href,
+                mediaType = mediaType
             )
-            
-            
-            repository.saveBookProgress(bookId, progress.toString())
-            android.util.Log.d("ReaderSync", "Saved unified progress: ch=$chapterIndex, elem=$elementId, audio=${actualAudioPos}ms, scroll=$scrollPercent")
-            
 
+            // Safeguard: Don't overwrite a meaningful position with 0 during load
+            if (actualAudioPos == 0L && finalElementId == null && lastSyncedProgress != null) {
+                val old = lastSyncedProgress!!
+                if (old.chapterIndex == chapterIndex && old.audioTimestampMs > 5000) {
+                    android.util.Log.d("ReaderSync", "Blocking reset to 0 for chapter $chapterIndex")
+                    return@launch
+                }
+            }
+            
+            if (lastSyncedProgress != null) {
+                val old = lastSyncedProgress!!
+                val timeDiff = kotlin.math.abs(progress.audioTimestampMs - old.audioTimestampMs)
+                if (progress.chapterIndex == old.chapterIndex && 
+                    progress.elementId == old.elementId && 
+                    timeDiff < 1000 &&
+                    kotlin.math.abs(progress.scrollPercent - old.scrollPercent) < 0.01) {
+                    return@launch
+                }
+            }
+            lastSyncedProgress = progress
+
+            repository.saveBookProgress(bookId, progress.toString()) // toString() now returns JSON
+            android.util.Log.d("ReaderSync", "Saved JSON progress: $progress")
+            
             try {
-                val percentage = ((chapterIndex + scrollPercent) / totalChapters.coerceAtLeast(1)).toDouble().coerceIn(0.0, 1.0)
-                val position = Position(
-                    percentage = percentage,
-                    timestamp = System.currentTimeMillis(),
-                    location = progress.toString()
-                )
-                AppContainer.apiClientManager.getApi().updatePosition(bookId, position)
-                android.util.Log.d("ReaderSync", "Synced position to server: ${(percentage * 100).toInt()}%")
+                val pos = progress.toPosition()
+                // Use the exact ms timestamp if the server supports it, but ensure no collision
+                AppContainer.apiClientManager.getApi().updatePosition(bookId, pos)
+                android.util.Log.d("ReaderSync", "Synced position to server: href=$href")
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 409) {
+                    android.util.Log.i("ReaderSync", "Server has newer or same position (409). skipping.")
+                } else {
+                    android.util.Log.w("ReaderSync", "Failed to sync to server: ${e.message}")
+                }
             } catch (e: Exception) {
                 android.util.Log.w("ReaderSync", "Failed to sync to server: ${e.message}")
             }
@@ -563,9 +665,14 @@ class ReaderViewModel(
     fun getTimeAtElement(chapterIndex: Int, elementId: String): Double? {
         val href = lazyBook?.spineHrefs?.getOrNull(chapterIndex) ?: return null
         val segments = syncData[href] ?: return null
-        val relativePos = segments.find { it.id == elementId }?.clipBegin ?: return null
         val offset = chapterOffsets[href] ?: 0.0
-        return offset + relativePos
+        
+        var cumulative = 0.0
+        for (seg in segments) {
+            if (seg.id == elementId) return offset + cumulative
+            cumulative += Math.max(0.0, seg.clipEnd - seg.clipBegin)
+        }
+        return null
     }
 
     fun overwriteChapterOffsets(startTimesMs: List<Long>) {

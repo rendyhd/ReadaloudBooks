@@ -44,16 +44,22 @@ fun ReaderScreen(
             onDismissRequest = { viewModel.dismissSync() },
             title = { Text("Progress Sync") },
             text = { 
-                Text("Progress detected at ${"%.1f".format(sync.progressPercent)}% from ${sync.source}. Do you want to use this?")
+                Text("Progress is out of sync with Storyteller.")
             },
             confirmButton = {
-                Button(onClick = { viewModel.confirmSync() }) {
-                    Text("Use Progress")
+                Button(
+                    onClick = { viewModel.confirmSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use server (${"%.1f".format(sync.progressPercent)}%)")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissSync() }) {
-                    Text("Ignore")
+                TextButton(
+                    onClick = { viewModel.dismissSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use local (${"%.1f".format(sync.localProgressPercent)}%)")
                 }
             }
         )
@@ -312,6 +318,12 @@ fun EpubWebView(
                                 viewModel.jumpToElementRequest.value = id
                             }
                         }
+
+                        @JavascriptInterface
+                        fun onReaderReady() {
+                            android.util.Log.d("EpubWebView", "Reader reported ready.")
+                            viewModel.markReady()
+                        }
                     }, "Android")
                 }
             },
@@ -325,7 +337,7 @@ fun EpubWebView(
                 val lastSignature = webView.tag as? String
                 
                 if (lastSignature != contentSignature) {
-                    val styledHtml = wrapHtml(html, userSettings, theme, viewModel.lastScrollPercent, accentHex, null)
+                    val styledHtml = wrapHtml(html, userSettings, theme, viewModel.lastScrollPercent, accentHex, highlightId)
                     android.util.Log.d("EpubWebView", "Reloading content. Signature changed: $contentSignature")
                     webView.loadDataWithBaseURL(baseUrl, styledHtml, "text/html", "UTF-8", null)
                     webView.scrollTo(0, 0)
@@ -338,10 +350,13 @@ fun EpubWebView(
                 currentHighlightId?.let { id ->
                     if (id.isNotEmpty()) {
                         val lastId = webView.getTag(com.pekempy.ReadAloudbooks.R.id.highlight_tag) as? String
-                        if (lastId != id) {
-                            android.util.Log.d("EpubWebView", "Update trigger: syncTrigger=$trigger, highlightId=$id")
+                        val lastTrigger = webView.getTag(com.pekempy.ReadAloudbooks.R.id.trigger_tag) as? Int ?: -1
+                        
+                        if (lastId != id || lastTrigger != trigger) {
+                            android.util.Log.d("EpubWebView", "Highlighting: $id (trigger $trigger)")
                             webView.evaluateJavascript("if (typeof highlightElement === 'function') highlightElement('$id')", null)
                             webView.setTag(com.pekempy.ReadAloudbooks.R.id.highlight_tag, id)
+                            webView.setTag(com.pekempy.ReadAloudbooks.R.id.trigger_tag, trigger)
                         }
                     }
                 }
@@ -496,9 +511,12 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 let pendingHighlight = null;
                 
                 function highlightElement(id, retryCount = 0) {
-                    if (!id) return;
+                    if (!id) {
+                        if (window.Android) window.Android.onReaderReady();
+                        return;
+                    }
                     
-                    if (id && id.match && id.match(/^c\d+$/) && currentHighlightId && currentHighlightId.match && currentHighlightId.match(/sentence|text|para/i)) {
+                    if (id && id.match && id.match(/^c\d+$/) && currentHighlightId && currentHighlightId.match && (currentHighlightId.includes('sentence') || currentHighlightId.includes('word') || currentHighlightId.includes('text'))) {
                         return;
                     }
                     
@@ -516,6 +534,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                             setTimeout(() => highlightElement(id, retryCount + 1), 200);
                         } else {
                             highlightInProgress = false;
+                            if (window.Android) window.Android.onReaderReady();
                             if (pendingHighlight && pendingHighlight !== id) {
                                 highlightElement(pendingHighlight);
                             }
@@ -532,24 +551,23 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     
                     const container = document.getElementById('content-container');
                     const step = getStep();
-                    
                     if (step > 0 && container) {
-                        let elementLeft = 0;
-                        let current = el;
-                        
-                        while (current && current !== container) {
-                            elementLeft += current.offsetLeft;
-                            current = current.offsetParent;
-                        }
-                        
+                        const rect = el.getBoundingClientRect();
+                        const elementLeft = elementLeftAbsolute(el, container);
                         const elementCenter = elementLeft + (el.offsetWidth / 2);
-                        const targetPage = Math.floor(elementCenter / step);
-                        const maxPages = Math.max(1, Math.ceil(container.scrollWidth / step));
-                        const clampedPage = Math.max(0, Math.min(targetPage, maxPages - 1));
                         
-                        if (clampedPage !== currentPage) {
-                            currentPage = clampedPage;
-                            updateTransform(true);
+                        // Use a more robust overlap check for visibility
+                        const isVisible = rect.left < (step - 5) && rect.right > 5;
+                        
+                        if (!isVisible) {
+                            const targetPage = Math.floor(elementCenter / step);
+                            const maxPages = Math.max(1, Math.ceil(container.scrollWidth / step));
+                            const clampedPage = Math.max(0, Math.min(targetPage, maxPages - 1));
+                            
+                            if (clampedPage !== currentPage) {
+                                currentPage = clampedPage;
+                                updateTransform(true);
+                            }
                         }
                     }
                     
@@ -559,7 +577,19 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         const nextHighlight = pendingHighlight;
                         pendingHighlight = null;
                         highlightElement(nextHighlight);
+                    } else {
+                        if (window.Android) window.Android.onReaderReady();
                     }
+                }
+                
+                function elementLeftAbsolute(el, container) {
+                    let left = 0;
+                    let current = el;
+                    while (current && current !== container) {
+                        left += current.offsetLeft;
+                        current = current.offsetParent;
+                    }
+                    return left;
                 }
                 
                 
@@ -582,26 +612,32 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     
                     if (window.Android) {
                         const totalWidth = container.scrollWidth;
-                        const maxPages = Math.max(1, Math.ceil(totalWidth / getStep()));
+                        const step = getStep();
+                        const currentX = currentPage * step;
+                        const maxPages = Math.max(1, Math.ceil(totalWidth / step));
+                        
+                        // Don't report progress if the layout isn't fully rendered or only 1 page
+                        if (maxPages <= 1 && totalWidth <= step + 10 && currentPage === 0) {
+                            return; 
+                        }
+                        
                         const percent = maxPages > 1 ? (currentPage / (maxPages - 1)) : 0;
                         
-                        const lookX = offset + 50; 
-                        const lookY = 160;
-                        
-                        let topElementId = "";
-                        
-                        const el = document.elementFromPoint(40, 160);
-                        if (el) {
-                            let curr = el;
-                            while(curr && !curr.id) {
-                                curr = curr.parentElement;
-                            }
-                            if (curr && curr.id) {
-                                topElementId = curr.id;
+                        let bestId = "";
+                        const elements = container.querySelectorAll('[id]');
+                        for (let i = 0; i < elements.length; i++) {
+                            const el = elements[i];
+                            if (el.id === 'content-container' || el.classList.contains('highlight')) continue;
+                            const left = elementLeftAbsolute(el, container);
+                            // We want the element that started before or on the current page
+                            if (left <= currentX + 50) {
+                                bestId = el.id;
+                            } else {
+                                break;
                             }
                         }
                         
-                        window.Android.onScrollWithId(percent, topElementId);
+                        window.Android.onScrollWithId(percent, bestId);
                     }
                 }
 
@@ -775,8 +811,13 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     if (highlightId) {
                         highlightElement(highlightId);
                     } else {
-                        currentPage = 0;
+                        const initialPercent = $initialScrollPercent;
+                        const container = document.getElementById('content-container');
+                        const totalWidth = container.scrollWidth;
+                        const maxPages = Math.max(1, Math.ceil(totalWidth / getStep()));
+                        currentPage = Math.round(initialPercent * (maxPages - 1));
                         updateTransform(false);
+                        if (window.Android) window.Android.onReaderReady();
                     }
                 };
             </script>

@@ -55,16 +55,22 @@ fun AudiobookPlayerScreen(
             onDismissRequest = { viewModel.dismissSync() },
             title = { Text("Progress Sync") },
             text = { 
-                Text("Progress detected at ${"%.1f".format(sync.progressPercent)}% from ${sync.source}. Do you want to use this?")
+                Text("Progress is out of sync with Storyteller.")
             },
             confirmButton = {
-                Button(onClick = { viewModel.confirmSync() }) {
-                    Text("Use Progress")
+                Button(
+                    onClick = { viewModel.confirmSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use server (${"%.1f".format(sync.progressPercent)}%)")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissSync() }) {
-                    Text("Ignore")
+                TextButton(
+                    onClick = { viewModel.dismissSync() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use local (${"%.1f".format(sync.localProgressPercent)}%)")
                 }
             }
         )
@@ -266,12 +272,6 @@ fun AudiobookPlayerScreen(
                         modifier = Modifier.align(Alignment.CenterStart)
                     ) {
                         Text("${"%.2f".format(viewModel.playbackSpeed)}x Speed")
-                    }
-                    
-                    if (book?.hasReadAloud == true) {
-                        IconButton(onClick = { onSwitchToReadAloud(bookId) }) {
-                            Icon(painterResource(R.drawable.ic_menu_book), contentDescription = "Read-Aloud")
-                        }
                     }
 
                     IconButton(

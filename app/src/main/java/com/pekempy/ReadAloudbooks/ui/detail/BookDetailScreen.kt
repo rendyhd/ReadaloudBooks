@@ -190,8 +190,10 @@ fun BookDetailScreen(
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         
-                        val bookProgress = viewModel.progress ?: 0f
-                        if (bookProgress > 0f) {
+                        val localProgress = viewModel.localProgress ?: 0f
+                        val serverProgress = viewModel.serverProgress ?: 0f
+                        
+                        if (localProgress > 0f || serverProgress > 0f) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -199,23 +201,54 @@ fun BookDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Progress",
+                                        text = "Position",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    Text(
-                                        text = "${(bookProgress * 100).toInt()}%",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        if (serverProgress > 0f) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
+                                                Text(
+                                                    text = "Cloud: ${(serverProgress * 100).toInt()}%",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                            }
+                                        }
+                                        if (localProgress > 0f) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                                                Text(
+                                                    text = "Local: ${(localProgress * 100).toInt()}%",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
+                                
+                                if (serverProgress > 0f) {
+                                    LinearProgressIndicator(
+                                        progress = { serverProgress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(2.dp)),
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        trackColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+
                                 LinearProgressIndicator(
-                                    progress = { bookProgress },
+                                    progress = { localProgress },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
                                     color = MaterialTheme.colorScheme.primary,
                                     trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                 )
@@ -255,7 +288,7 @@ fun BookDetailScreen(
                                         sections.add {
                                             val isDownloaded = book.isReadAloudDownloaded
                                             val isCurrentReadAloud = readAloudViewModel.currentBook?.id == book.id
-                                            val label = if (isCurrentReadAloud) "Resume" else if (isDownloaded) "ReadAloud" else "Download\nReadAloud"
+                                            val label = if (isCurrentReadAloud) "Resume" else if (isDownloaded) "Read & Listen" else "Download\nReadAloud"
                                             
                                             Box(
                                                 modifier = Modifier
@@ -277,83 +310,83 @@ fun BookDetailScreen(
                                                             if (isCurrentReadAloud && readAloudViewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_menu_book
                                                         } else R.drawable.ic_download), 
                                                         contentDescription = null, 
-                                                        modifier = Modifier.size(20.dp)
+                                                        modifier = Modifier.size(24.dp)
                                                     )
                                                     Text(
                                                         label, 
-                                                        style = MaterialTheme.typography.labelSmall, 
+                                                        style = MaterialTheme.typography.labelMedium, 
                                                         fontWeight = FontWeight.Bold,
                                                         textAlign = TextAlign.Center
                                                     )
                                                 }
                                             }
                                         }
-                                    }
-
-                                    if (book.hasAudiobook) {
-                                        sections.add {
-                                            val isDownloaded = book.isAudiobookDownloaded
-                                            val isCurrentAudio = audiobookViewModel.currentBook?.id == book.id
-                                            val label = if (isCurrentAudio) "Resume" else if (isDownloaded) "Audio" else "Download\nAudio"
-                                            
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .fillMaxHeight()
-                                                    .clickable { 
-                                                        if (isDownloaded) {
-                                                            if (isCurrentAudio && !audiobookViewModel.isPlaying) {
-                                                                audiobookViewModel.play()
-                                                            }
-                                                            onPlay(book) 
-                                                        } else viewModel.downloadAudiobook(context.filesDir)
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Icon(
-                                                        painterResource(if (isDownloaded) {
-                                                            if (isCurrentAudio && audiobookViewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_headset
-                                                        } else R.drawable.ic_download), 
-                                                        contentDescription = null, 
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                    Text(
-                                                        label, 
-                                                        style = MaterialTheme.typography.labelSmall, 
-                                                        fontWeight = FontWeight.Bold,
-                                                        textAlign = TextAlign.Center
-                                                    )
+                                    } else {
+                                        if (book.hasAudiobook) {
+                                            sections.add {
+                                                val isDownloaded = book.isAudiobookDownloaded
+                                                val isCurrentAudio = audiobookViewModel.currentBook?.id == book.id
+                                                val label = if (isCurrentAudio) "Resume" else if (isDownloaded) "Audio" else "Download\nAudio"
+                                                
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .fillMaxHeight()
+                                                        .clickable { 
+                                                            if (isDownloaded) {
+                                                                if (isCurrentAudio && !audiobookViewModel.isPlaying) {
+                                                                    audiobookViewModel.play()
+                                                                }
+                                                                onPlay(book) 
+                                                            } else viewModel.downloadAudiobook(context.filesDir)
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                        Icon(
+                                                            painterResource(if (isDownloaded) {
+                                                                if (isCurrentAudio && audiobookViewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_headset
+                                                            } else R.drawable.ic_download), 
+                                                            contentDescription = null, 
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Text(
+                                                            label, 
+                                                            style = MaterialTheme.typography.labelSmall, 
+                                                            fontWeight = FontWeight.Bold,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    if (book.hasEbook) {
-                                        sections.add {
-                                            val isDownloaded = book.isEbookDownloaded
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .fillMaxHeight()
-                                                    .clickable { 
-                                                        if (isDownloaded) onRead(book.id, false) 
-                                                        else viewModel.downloadEbook(context.filesDir)
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Icon(
-                                                        painterResource(if (isDownloaded) R.drawable.ic_book else R.drawable.ic_download), 
-                                                        contentDescription = null, 
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                    Text(
-                                                        if (isDownloaded) "eBook" else "Download\neBook", 
-                                                        style = MaterialTheme.typography.labelSmall, 
-                                                        fontWeight = FontWeight.Bold,
-                                                        textAlign = TextAlign.Center
-                                                    )
+                                        if (book.hasEbook) {
+                                            sections.add {
+                                                val isDownloaded = book.isEbookDownloaded
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .fillMaxHeight()
+                                                        .clickable { 
+                                                            if (isDownloaded) onRead(book.id, false) 
+                                                            else viewModel.downloadEbook(context.filesDir)
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                        Icon(
+                                                            painterResource(if (isDownloaded) R.drawable.ic_book else R.drawable.ic_download), 
+                                                            contentDescription = null, 
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Text(
+                                                            if (isDownloaded) "eBook" else "Download\neBook", 
+                                                            style = MaterialTheme.typography.labelSmall, 
+                                                            fontWeight = FontWeight.Bold,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }

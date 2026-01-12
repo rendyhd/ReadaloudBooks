@@ -71,9 +71,26 @@ data class ReadAloudResponse(
 )
 
 data class Position(
-    val uuid: String? = null,
-    val percentage: Double,
-    val completed: Boolean = false,
-    val timestamp: Long = System.currentTimeMillis(),
-    val location: String 
+    val locator: Locator,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class Locator(
+    val href: String,
+    @SerializedName("type") val mediaType: String,
+    val title: String? = null,
+    val locations: Locations
+)
+
+data class Locations(
+    val progression: Double,
+    val position: Int? = null,
+    @SerializedName("totalProgression") val totalProgression: Double? = null,
+    
+    // Additional fields for local storage and unified progress mapping
+    val audioTimestampMs: Long? = null,
+    val chapterIndex: Int? = null,
+    val elementId: String? = null,
+    val totalChapters: Int? = null,
+    val totalDurationMs: Long? = null
 )

@@ -52,6 +52,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
     data class SyncConfirmation(
         val newPositionMs: Long,
         val progressPercent: Float,
+        val localProgressPercent: Float,
         val source: String
     )
     var syncConfirmation by mutableStateOf<SyncConfirmation?>(null)
@@ -63,6 +64,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
     private var appContext: android.content.Context? = null
     private var currentZipFile: ZipFile? = null
     private var pendingSeekPosition: Long? = null
+    private var loadedSpineHrefs: List<String> = emptyList()
     
     data class ClipSegment(
         val elementId: String, 
@@ -153,30 +155,36 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
             android.util.Log.d("ReadAloudAudioVM", "Book $bookId already loaded. Checking for external progress updates...")
             viewModelScope.launch(Dispatchers.Main) {
                 val progressStr = repository.getBookProgress(bookId).first()
-                progressStr?.let {
-                    val progress = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromString(it)
-                    progress?.let { p ->
-                        val savedMs = p.audioTimestampMs
-                        if (savedMs > 0) {
-                            val diff = savedMs - currentPosition
-                            val fiveMinutesMs = 5 * 60 * 1000L
-                            
-                            val isAtStart = currentPosition < 5000L
-                            
-                            if ((diff < 0 && diff >= -fiveMinutesMs) || (isAtStart && diff > 0)) {
-                                android.util.Log.d("ReadAloudAudioVM", "Auto-syncing position jump: $diff ms (isAtStart=$isAtStart)")
-                                seekTo(savedMs)
-                            } else if (kotlin.math.abs(diff) > 5000) {
-                                android.util.Log.d("ReadAloudAudioVM", "Showing sync confirmation for jump: $diff ms")
-                                val percent = if (duration > 0) (savedMs.toFloat() / duration) * 100 else 0f
-                                syncConfirmation = SyncConfirmation(
-                                    newPositionMs = savedMs,
-                                    progressPercent = percent,
-                                    source = "another device"
-                                )
+                val progress = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromString(progressStr)
+                
+                try {
+                    val serverPos = AppContainer.apiClientManager.getApi().getPosition(bookId)
+                    if (serverPos != null) {
+                        val serverProgress = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromPosition(serverPos)
+                        val localLastUpdated = progress?.lastUpdated ?: 0L
+                        
+                        if (serverProgress.lastUpdated > localLastUpdated) {
+                            if (duration > 0) {
+                                val serverPercent = (serverProgress.audioTimestampMs.toFloat() / duration) * 100
+                                val localPercent = (currentPosition.toFloat() / duration) * 100
+                                
+                                if (kotlin.math.abs(serverPercent - localPercent) > 5f) {
+                                    android.util.Log.d("ReadAloudAudioVM", "Server progress is newer and significantly different. Prompting.")
+                                    syncConfirmation = SyncConfirmation(
+                                        newPositionMs = serverProgress.audioTimestampMs,
+                                        progressPercent = serverPercent.coerceIn(0f, 100f),
+                                        localProgressPercent = localPercent.coerceIn(0f, 100f),
+                                        source = "Storyteller Server"
+                                    )
+                                } else {
+                                    android.util.Log.d("ReadAloudAudioVM", "Server progress is newer but minor. Auto-syncing.")
+                                    seekTo(serverProgress.audioTimestampMs)
+                                }
                             }
                         }
                     }
+                } catch (e: Exception) {
+                    android.util.Log.w("ReadAloudAudioVM", "Failed to check server progress: ${e.message}")
                 }
                 isLoading = false
             }
@@ -304,6 +312,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                     chapters = localChaptersList
                     duration = calculatedDuration
                     
+                    loadedSpineHrefs = spineHrefs
                     player?.setMediaItems(mediaItems)
                     player?.prepare()
                     android.util.Log.d("ReadAloudAudioVM", "Player prepared with ${mediaItems.size} items")
@@ -551,30 +560,47 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
     
     private suspend fun loadProgress(bookId: String) {
         val progressStr = repository.getBookProgress(bookId).first()
-        val progress = UnifiedProgress.fromString(progressStr)
+        val localProgress = UnifiedProgress.fromString(progressStr)
+        var finalProgressToUse = localProgress
         
-        progress?.let {
-            val audioMs = it.audioTimestampMs
-            android.util.Log.d("ReadAloudAudioVM", "Found saved progress: $audioMs ms, element: ${it.elementId}")
-            
-            if (audioMs < 0) {
-                android.util.Log.w("ReadAloudAudioVM", "Invalid negative timestamp ($audioMs ms), resetting to 0")
-                withContext(Dispatchers.Main) {
-                    pendingSeekPosition = 0
-                    currentPosition = 0
+        try {
+            val serverPos = AppContainer.apiClientManager.getApi().getPosition(bookId)
+            if (serverPos != null) {
+                val serverProgress = UnifiedProgress.fromPosition(serverPos, chapters.size)
+                val localLastUpdated = localProgress?.lastUpdated ?: 0L
+                
+                if (serverProgress.lastUpdated > localLastUpdated) {
+                    if (duration > 0) {
+                        val serverPercent = (serverProgress.audioTimestampMs.toFloat() / duration) * 100
+                        val localPercent = ((localProgress?.audioTimestampMs?.toFloat() ?: 0f) / duration) * 100
+                        
+                        if (kotlin.math.abs(serverPercent - localPercent) > 5f) {
+                            withContext(Dispatchers.Main) {
+                                syncConfirmation = SyncConfirmation(
+                                    newPositionMs = serverProgress.audioTimestampMs,
+                                    progressPercent = serverPercent.coerceIn(0f, 100f),
+                                    localProgressPercent = localPercent.coerceIn(0f, 100f),
+                                    source = "Storyteller Server"
+                                )
+                            }
+                        } else {
+                            finalProgressToUse = serverProgress
+                        }
+                    } else {
+                        finalProgressToUse = serverProgress
+                    }
                 }
-                return@let
             }
+        } catch (e: Exception) {
+            android.util.Log.w("ReadAloudAudioVM", "Failed to fetch server progress early: ${e.message}")
+        }
+        
+        finalProgressToUse?.let {
+            val audioMs = it.audioTimestampMs
             
-            if (audioMs > duration && duration > 0) {
-                android.util.Log.w("ReadAloudAudioVM", "Saved progress ($audioMs ms) exceeds clip duration ($duration ms), resetting to 0")
-                withContext(Dispatchers.Main) {
-                    pendingSeekPosition = 0
-                    currentPosition = 0
-                }
-            } else if (audioMs > 0) {
+            if (audioMs > 0) {
                 val validMs = audioMs.coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
-                android.util.Log.d("ReadAloudAudioVM", "Will seek to saved progress: $validMs ms")
+                android.util.Log.d("ReadAloudAudioVM", "Will seek to progress: $validMs ms")
                 withContext(Dispatchers.Main) {
                     pendingSeekPosition = validMs
                     currentPosition = validMs
@@ -586,16 +612,12 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                     val chapter = chapters[chapterIndex]
                     val offset = (chapter.duration * scrollPercent).toLong()
                     val resMs = (chapter.startOffset + offset).coerceIn(0L, duration)
-                    android.util.Log.d("ReadAloudAudioVM", "Will seek to calculated chapter progress: $resMs ms (Ch $chapterIndex @ ${scrollPercent * 100}%)")
                     withContext(Dispatchers.Main) {
                         pendingSeekPosition = resMs
                         currentPosition = resMs
                     }
-                } else {
-                    android.util.Log.d("ReadAloudAudioVM", "Starting from beginning")
                 }
             }
-            Unit
         }
     }
 
@@ -841,21 +863,38 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
             val chList = chapters
             val elemId = currentElementId
             
-            val chapter = chList.getOrNull(chIdx)
-            val chapterProgress = if (chapter != null && chapter.duration > 0) {
-                (pos - chapter.startOffset).toFloat() / chapter.duration
+            val currentCh = chList.getOrNull(chIdx)
+            val chapterProgress = if (currentCh != null && currentCh.duration > 0) {
+                (pos - currentCh.startOffset).toFloat() / currentCh.duration
             } else 0f
             
+            val chIdxToUse = chIdx.coerceAtLeast(0)
+            val href = loadedSpineHrefs.getOrNull(chIdxToUse) 
+                ?: (if (chIdx >= 0 && chList.isNotEmpty()) "chapter_$chIdx" else null)
+            
+            if (href == null) {
+                android.util.Log.w("ReadAloudAudioVM", "Cannot save progress: No valid HREF found for chapter $chIdx")
+                return@launch
+            }
+
             val progress = com.pekempy.ReadAloudbooks.data.UnifiedProgress(
-                chapterIndex = chIdx.coerceAtLeast(0),
+                chapterIndex = chIdxToUse,
                 elementId = elemId,
                 audioTimestampMs = pos,
                 scrollPercent = chapterProgress,
                 lastUpdated = System.currentTimeMillis(),
                 totalChapters = chList.size,
-                totalDurationMs = dur
+                totalDurationMs = dur,
+                href = href,
+                mediaType = "application/xhtml+xml"
             )
             repository.saveBookProgress(bookId, progress.toString())
+            
+            try {
+                AppContainer.apiClientManager.getApi().updatePosition(bookId, progress.toPosition())
+            } catch (e: Exception) {
+                android.util.Log.w("ReadAloudAudioVM", "Failed to sync ReadAloud progress: ${e.message}")
+            }
         }
     }
 

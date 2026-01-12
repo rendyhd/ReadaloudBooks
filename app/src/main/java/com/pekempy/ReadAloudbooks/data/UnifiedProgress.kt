@@ -1,5 +1,10 @@
 package com.pekempy.ReadAloudbooks.data
 
+import com.google.gson.Gson
+import com.pekempy.ReadAloudbooks.data.api.Position
+import com.pekempy.ReadAloudbooks.data.api.Locator
+import com.pekempy.ReadAloudbooks.data.api.Locations
+
 data class UnifiedProgress(
     val chapterIndex: Int,
     val elementId: String?,
@@ -7,21 +12,70 @@ data class UnifiedProgress(
     val scrollPercent: Float,
     val lastUpdated: Long,
     val totalChapters: Int,
-    val totalDurationMs: Long = 0L
+    val totalDurationMs: Long = 0L,
+    val href: String? = null,
+    val mediaType: String? = null
 ) {
     fun getOverallProgress(): Float {
-        if (totalDurationMs > 0) {
-            return (audioTimestampMs.toFloat() / totalDurationMs).coerceIn(0f, 1f)
+        if (totalDurationMs > 0 && audioTimestampMs > 0) {
+            return (audioTimestampMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
         }
-        if (totalChapters <= 0) return 0f
-        if (totalChapters == 1) return scrollPercent.coerceIn(0f, 1f)
-        return (chapterIndex + scrollPercent.coerceIn(0f, 1f)) / totalChapters
+        if (totalChapters <= 1) return scrollPercent.coerceIn(0f, 1f)
+        return ((chapterIndex.toFloat() + scrollPercent.coerceIn(0f, 1f)) / totalChapters.toFloat()).coerceIn(0f, 1f)
+    }
+
+    fun toPosition(): Position {
+        return Position(
+            locator = Locator(
+                href = href ?: "chapter_$chapterIndex",
+                mediaType = mediaType ?: "application/xhtml+xml",
+                locations = Locations(
+                    progression = scrollPercent.toDouble().coerceIn(0.0, 1.0),
+                    totalProgression = getOverallProgress().toDouble().coerceIn(0.0, 1.0),
+                    audioTimestampMs = audioTimestampMs,
+                    chapterIndex = chapterIndex,
+                    elementId = elementId,
+                    totalChapters = totalChapters,
+                    totalDurationMs = totalDurationMs
+                )
+            ),
+            timestamp = lastUpdated / 1000
+        )
     }
 
     companion object {
+        private val gson = Gson()
+
+        fun fromPosition(pos: Position, totalChaptersCount: Int = 1): UnifiedProgress {
+            val loc = pos.locator.locations
+            return UnifiedProgress(
+                chapterIndex = loc.chapterIndex ?: 0,
+                elementId = loc.elementId,
+                audioTimestampMs = loc.audioTimestampMs ?: 0L,
+                scrollPercent = loc.progression.toFloat(),
+                lastUpdated = pos.timestamp * 1000,
+                totalChapters = loc.totalChapters ?: totalChaptersCount,
+                totalDurationMs = loc.totalDurationMs ?: 0L,
+                href = pos.locator.href,
+                mediaType = pos.locator.mediaType
+            )
+        }
+
         fun fromString(progressStr: String?): UnifiedProgress? {
             if (progressStr.isNullOrBlank()) return null
             
+            // Try parsing as JSON first (new format)
+            if (progressStr.trim().startsWith("{")) {
+                return try {
+                    val pos = gson.fromJson(progressStr, Position::class.java)
+                    fromPosition(pos)
+                } catch (e: Exception) {
+                    android.util.Log.e("UnifiedProgress", "Failed to parse JSON progress", e)
+                    null
+                }
+            }
+
+            // Fallback to legacy colon-separated format
             val parts = progressStr.split(":")
             if (parts.isEmpty()) return null
             
@@ -80,15 +134,14 @@ data class UnifiedProgress(
                     null
                 }
             } catch (e: Exception) {
-                android.util.Log.e("UnifiedProgress", "Failed to parse progress: $progressStr", e)
+                android.util.Log.e("UnifiedProgress", "Failed to parse legacy progress: $progressStr", e)
                 null
             }
         }
     }
     
     override fun toString(): String {
-        val elementIdPart = elementId ?: ""
-        return "$chapterIndex:$elementIdPart:$audioTimestampMs:$scrollPercent:$lastUpdated:$totalChapters:$totalDurationMs"
+        return Gson().toJson(toPosition())
     }
     
     fun withAudioPosition(

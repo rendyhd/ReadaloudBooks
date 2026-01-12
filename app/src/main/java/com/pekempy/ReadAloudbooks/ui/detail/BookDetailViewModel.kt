@@ -16,7 +16,8 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
     var book by mutableStateOf<Book?>(null)
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
-    var progress by mutableStateOf<Float?>(null)
+    var localProgress by mutableStateOf<Float?>(null)
+    var serverProgress by mutableStateOf<Float?>(null)
 
     fun loadBook(uuid: String) {
         viewModelScope.launch {
@@ -53,14 +54,29 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
                 
                 val progressStr = repository.getBookProgress(uuid).first()
                 val up = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromString(progressStr)
-                this@BookDetailViewModel.progress = up?.getOverallProgress()
+                this@BookDetailViewModel.localProgress = up?.getOverallProgress()
+                
+                try {
+                    val serverPos = apiManager.getApi().getPosition(uuid)
+                    if (serverPos != null) {
+                        val serverTotal = serverPos.locator.locations.totalProgression?.toFloat()
+                        if (serverTotal != null) {
+                            this@BookDetailViewModel.serverProgress = serverTotal
+                        } else {
+                            val serverUp = com.pekempy.ReadAloudbooks.data.UnifiedProgress.fromPosition(serverPos)
+                            this@BookDetailViewModel.serverProgress = serverUp.getOverallProgress()
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("BookDetailVM", "Failed to fetch server position: ${e.message}")
+                }
 
                 book = tempBook.copy(
                     isDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isBookDownloaded(AppContainer.context.filesDir, tempBook),
                     isAudiobookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isAudiobookDownloaded(AppContainer.context.filesDir, tempBook),
                     isEbookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isEbookDownloaded(AppContainer.context.filesDir, tempBook),
                     isReadAloudDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isReadAloudDownloaded(AppContainer.context.filesDir, tempBook),
-                    progress = this@BookDetailViewModel.progress
+                    progress = this@BookDetailViewModel.localProgress
                 )
             } catch (e: Exception) {
                 error = "Failed to load book: ${e.message}"

@@ -3,4 +3,5 @@
     <item name="highlight_tag" type="id"/>
     <item name="search_tag" type="id"/>
     <item name="anchor_tag" type="id"/>
+    <item name="trigger_tag" type="id"/>
 </resources>
