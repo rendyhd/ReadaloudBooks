@@ -5,10 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -115,7 +113,7 @@ fun MiniPlayerBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AsyncImage(
-                    model = if (isReadAloud) activeBook.ebookCoverUrl else activeBook.audiobookCoverUrl,
+                    model = activeBook.audiobookCoverUrl ?: activeBook.ebookCoverUrl ?: activeBook.coverUrl,
                     contentDescription = null,
                     modifier = Modifier
                         .size(48.dp)
@@ -152,7 +150,7 @@ fun MiniPlayerBar(
                     }
                 ) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow),
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -162,7 +160,7 @@ fun MiniPlayerBar(
                     onClick = { showStopConfirmation = true }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Close,
+                        painter = painterResource(R.drawable.ic_close),
                         contentDescription = "Stop and Close",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )

@@ -6,9 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -78,7 +77,7 @@ fun BookItem(
                 
                 if (book.coverUrl == null) {
                     Icon(
-                        Icons.Default.Book,
+                        painterResource(R.drawable.ic_book),
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
@@ -106,7 +105,7 @@ fun BookItem(
                             )
                         }
                         Icon(
-                            imageVector = Icons.Default.Download,
+                            painter = painterResource(R.drawable.ic_download),
                             contentDescription = "Download",
                             modifier = Modifier.size(20.dp),
                             tint = if (book.isDownloaded) Color.Green else Color.LightGray
@@ -194,7 +193,7 @@ fun CategoryListItem(
                 contentAlignment = Alignment.Center
             ) {
                 if (covers.isEmpty()) {
-                    Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(32.dp))
+                    Icon(painterResource(R.drawable.ic_book), contentDescription = null, modifier = Modifier.size(32.dp))
                 } else {
                     when {
                         covers.size == 1 -> {
@@ -262,7 +261,7 @@ fun CategoryListItem(
                 modifier = Modifier.weight(1f)
             )
             
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            Icon(painterResource(R.drawable.ic_keyboard_arrow_right), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
         }
     }
 }
@@ -288,7 +287,7 @@ fun BookActionMenu(
         if (book.hasEbook) {
             DropdownMenuItem(
                 text = { Text("Read eBook") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_menu_book), contentDescription = null) },
                 onClick = { 
                     onReadEbook(book)
                     onDismissRequest()
@@ -298,7 +297,7 @@ fun BookActionMenu(
         if (book.hasReadAloud) {
             DropdownMenuItem(
                 text = { Text("Play ReadAloud") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_menu_book), contentDescription = null) },
                 onClick = {
                     onPlayReadAloud(book)
                     onDismissRequest()
@@ -307,7 +306,7 @@ fun BookActionMenu(
         } else if (book.hasAudiobook) {
             DropdownMenuItem(
                 text = { Text("Play Audiobook") },
-                leadingIcon = { Icon(Icons.Default.Headphones, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_headphones), contentDescription = null) },
                 onClick = {
                     onPlayAudiobook(book)
                     onDismissRequest()
@@ -319,7 +318,7 @@ fun BookActionMenu(
 
         DropdownMenuItem(
             text = { Text("Mark Finished") },
-            leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null) },
             onClick = {
                 onMarkFinished(book)
                 onDismissRequest()
@@ -328,7 +327,7 @@ fun BookActionMenu(
 
         DropdownMenuItem(
             text = { Text("Mark Unread") },
-            leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_history), contentDescription = null) },
             onClick = {
                 onMarkUnread(book)
                 onDismissRequest()
@@ -338,7 +337,7 @@ fun BookActionMenu(
         if (onRemoveFromHome != null) {
             DropdownMenuItem(
                 text = { Text("Remove from Home") },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_delete), contentDescription = null) },
                 onClick = {
                     onRemoveFromHome(book)
                     onDismissRequest()

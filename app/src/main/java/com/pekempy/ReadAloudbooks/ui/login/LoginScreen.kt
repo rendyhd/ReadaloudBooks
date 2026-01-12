@@ -2,11 +2,8 @@ package com.pekempy.ReadAloudbooks.ui.login
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Public
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,8 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
-import com.pekempy.ReadAloudbooks.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +61,7 @@ fun LoginScreen(
                 label = { Text("Storyteller URL") },
                 placeholder = { Text("e.g. storyteller.your-domain.tld") },
                 modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Default.Public, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_public), contentDescription = null) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
             )
@@ -78,7 +73,7 @@ fun LoginScreen(
                 onValueChange = { viewModel.username = it },
                 label = { Text("Username") },
                 modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_person), contentDescription = null) },
                 singleLine = true
             )
 
@@ -89,7 +84,7 @@ fun LoginScreen(
                 onValueChange = { viewModel.password = it },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_lock), contentDescription = null) },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 singleLine = true

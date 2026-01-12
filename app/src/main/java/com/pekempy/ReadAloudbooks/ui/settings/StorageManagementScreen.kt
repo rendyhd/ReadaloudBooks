@@ -5,12 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
@@ -59,13 +55,13 @@ fun StorageManagementScreen(
                             onBack()
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 actions = {
                     if (viewModel.selectedBookItem == null) {
                         IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                            Icon(painterResource(R.drawable.ic_sort), contentDescription = "Sort")
                         }
                         DropdownMenu(
                             expanded = showSortMenu,
@@ -89,7 +85,7 @@ fun StorageManagementScreen(
                         }
                     } else {
                          IconButton(onClick = { viewModel.deleteBook(viewModel.selectedBookItem!!) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete All", tint = MaterialTheme.colorScheme.error)
+                            Icon(painterResource(R.drawable.ic_delete), contentDescription = "Delete All", tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 },
@@ -204,7 +200,7 @@ fun StorageBookCard(item: BookStorageItem, onClick: () -> Unit, onDelete: () -> 
                     )
                 } else {
                     Icon(
-                        Icons.Default.Book,
+                        painterResource(R.drawable.ic_book),
                         contentDescription = null,
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -236,7 +232,7 @@ fun StorageBookCard(item: BookStorageItem, onClick: () -> Unit, onDelete: () -> 
             }
             
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete Book", tint = MaterialTheme.colorScheme.error)
+                Icon(painterResource(R.drawable.ic_delete), contentDescription = "Delete Book", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -252,16 +248,16 @@ fun StorageFileItem(item: StorageItem, onDelete: () -> Unit) {
             Text("${formatSize(item.sizeBytes)} • ${formatDate(item.lastModified)}") 
         },
         leadingContent = {
-            val icon = when {
-                item.name.contains("(readaloud)", ignoreCase = true) -> Icons.AutoMirrored.Filled.MenuBook
-                item.name.endsWith(".m4b", ignoreCase = true) -> Icons.Default.Headset
-                else -> Icons.Default.Book
+            val iconRes = when {
+                item.name.contains("(readaloud)", ignoreCase = true) -> R.drawable.ic_menu_book
+                item.name.endsWith(".m4b", ignoreCase = true) -> R.drawable.ic_headset
+                else -> R.drawable.ic_book
             }
-            Icon(icon, contentDescription = null)
+            Icon(painterResource(iconRes), contentDescription = null)
         },
         trailingContent = {
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete File", tint = MaterialTheme.colorScheme.error)
+                Icon(painterResource(R.drawable.ic_delete), contentDescription = "Delete File", tint = MaterialTheme.colorScheme.error)
             }
         }
     )
@@ -289,7 +285,7 @@ fun ActiveDownloadCard(job: com.pekempy.ReadAloudbooks.data.DownloadJob, onRemov
                 }
                 if (job.isCompleted || job.isFailed) {
                     IconButton(onClick = onRemove) {
-                        Icon(Icons.Default.Delete, contentDescription = "Clear")
+                        Icon(painterResource(R.drawable.ic_delete), contentDescription = "Clear")
                     }
                 } else {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)

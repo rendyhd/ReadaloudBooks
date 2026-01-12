@@ -5,19 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,7 +37,7 @@ fun SettingsHome(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -67,37 +56,37 @@ fun SettingsHome(
             SettingsNavItem(
                 title = "Connection",
                 subtitle = "Manage server and account",
-                icon = Icons.Default.Link
+                iconRes = R.drawable.ic_link
             ) { onNavigateTo("settings/connections") }
             
             SettingsNavItem(
                 title = "Theming",
                 subtitle = "Customize appearance",
-                icon = Icons.Default.Palette
+                iconRes = R.drawable.ic_palette
             ) { onNavigateTo("settings/theming") }
             
             SettingsNavItem(
                 title = "Audio Playback",
                 subtitle = "Player settings",
-                icon = Icons.Default.Headphones
+                iconRes = R.drawable.ic_headphones
             ) { onNavigateTo("settings/audio") }
             
             SettingsNavItem(
                 title = "eBook",
                 subtitle = "Reader settings",
-                icon = Icons.Default.Book
+                iconRes = R.drawable.ic_book
             ) { onNavigateTo("settings/ebook") }
             
             SettingsNavItem(
                 title = "Storage",
                 subtitle = "Manage downloaded files",
-                icon = Icons.Default.Storage
+                iconRes = R.drawable.ic_storage
             ) { onNavigateTo("storage") }
 
             SettingsNavItem(
                 title = "Support",
                 subtitle = "Support the projects and developer",
-                icon = Icons.Default.CardGiftcard
+                iconRes = R.drawable.ic_card_giftcard
             ) { onNavigateTo("settings/support") }
         }
     }
@@ -107,14 +96,14 @@ fun SettingsHome(
 fun SettingsNavItem(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int,
     onClick: () -> Unit
 ) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle) },
-        leadingContent = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null) },
+        leadingContent = { Icon(painterResource(iconRes), contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        trailingContent = { Icon(painterResource(R.drawable.ic_keyboard_arrow_right), contentDescription = null) },
         modifier = Modifier.clickable(onClick = onClick)
     )
     HorizontalDivider()
@@ -133,7 +122,7 @@ fun SettingsConnections(
                 title = { Text("Connection") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -185,7 +174,7 @@ fun SettingsTheming(
                 title = { Text("Theming") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -266,7 +255,7 @@ fun SettingsAudio(
                 title = { Text("Audio Playback") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -349,7 +338,7 @@ fun SettingsEbook(
                 title = { Text("eBook") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -562,7 +551,7 @@ fun SettingsSupport(
                 title = { Text("Support") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -572,37 +561,52 @@ fun SettingsSupport(
             )
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SupportItem(
-                title = "Donate to the developer",
-                subtitle = "paypal.me/TroubledMindTrade",
-                icon = Icons.Default.Payments,
-                onClick = { onOpenUrl("https://paypal.me/TroubledMindTrade") }
-            )
-            SupportItem(
-                title = "Sponsor the developer",
-                subtitle = "github.com/pekempy",
-                icon = Icons.Default.Code,
-                onClick = { onOpenUrl("https://github.com/pekempy") }
-            )
-            SupportItem(
-                title = "Support Storyteller",
-                subtitle = "opencollective.com/storyteller",
-                icon = Icons.Default.Whatshot,
-                onClick = { onOpenUrl("https://opencollective.com/storyteller") }
-            )
-            SupportItem(
-                title = "Support Hardcover",
-                subtitle = "hardcover.app/supporter",
-                icon = Icons.Default.Book,
-                onClick = { onOpenUrl("https://hardcover.app/supporter") }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .paddingFromBaseline(bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SupportItem(
+                    title = "Donate to the developer",
+                    subtitle = "paypal.me/TroubledMindTrade",
+                    iconRes = R.drawable.ic_payments,
+                    onClick = { onOpenUrl("https://paypal.me/TroubledMindTrade") }
+                )
+                SupportItem(
+                    title = "Sponsor the developer",
+                    subtitle = "github.com/pekempy",
+                    iconRes = R.drawable.ic_code,
+                    onClick = { onOpenUrl("https://github.com/pekempy") }
+                )
+                SupportItem(
+                    title = "Support Storyteller",
+                    subtitle = "opencollective.com/storyteller",
+                    iconRes = R.drawable.ic_mode_heat,
+                    onClick = { onOpenUrl("https://opencollective.com/storyteller") }
+                )
+                SupportItem(
+                    title = "Support Hardcover",
+                    subtitle = "hardcover.app/supporter",
+                    iconRes = R.drawable.ic_book,
+                    onClick = { onOpenUrl("https://hardcover.app/supporter") }
+                )
+            }
+            
+            Text(
+                text = "This app was coded with the assistance of AI technology. This message is included as part of the developer's commitment to transparency about the use of AI in software development.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
             )
         }
     }
@@ -612,21 +616,23 @@ fun SettingsSupport(
 fun SupportItem(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = icon,
+                painter = painterResource(iconRes),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)

@@ -9,17 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.Pause
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
@@ -127,7 +118,7 @@ fun BookDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.Person,
+                                    painterResource(R.drawable.ic_person),
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.primary
@@ -147,7 +138,7 @@ fun BookDetailScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(
-                                        Icons.Default.Mic,
+                                        painterResource(R.drawable.ic_mic),
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp),
                                         tint = MaterialTheme.colorScheme.secondary
@@ -171,7 +162,7 @@ fun BookDetailScreen(
                             SuggestionChip(
                                 onClick = { onSeriesClick(book.series) },
                                 label = { Text(seriesText) },
-                                icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                                icon = { Icon(painterResource(R.drawable.ic_list), contentDescription = null) }
                             )
                         }
                         
@@ -182,17 +173,17 @@ fun BookDetailScreen(
                         ) {
                             FormatIndicator(
                                 label = "ReadAloud",
-                                icon = Icons.AutoMirrored.Filled.MenuBook,
+                                iconRes = R.drawable.ic_menu_book,
                                 isAvailable = book.hasReadAloud
                             )
                             FormatIndicator(
                                 label = "Audio",
-                                icon = Icons.Default.Headset,
+                                iconRes = R.drawable.ic_headset,
                                 isAvailable = book.hasAudiobook
                             )
                             FormatIndicator(
                                 label = "eBook",
-                                icon = Icons.Default.Book,
+                                iconRes = R.drawable.ic_book,
                                 isAvailable = book.hasEbook
                             )
                         }
@@ -245,7 +236,7 @@ fun BookDetailScreen(
                                     Spacer(Modifier.width(12.dp))
                                     Text("Downloading...")
                                 } else {
-                                    Icon(Icons.Default.Download, contentDescription = null)
+                                    Icon(painterResource(R.drawable.ic_download), contentDescription = null)
                                     Spacer(Modifier.width(12.dp))
                                     Text("Download")
                                 }
@@ -282,9 +273,9 @@ fun BookDetailScreen(
                                             ) {
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     Icon(
-                                                        if (isDownloaded) {
-                                                            if (isCurrentReadAloud && readAloudViewModel.isPlaying) Icons.Default.Pause else Icons.AutoMirrored.Filled.MenuBook
-                                                        } else Icons.Default.Download, 
+                                                        painterResource(if (isDownloaded) {
+                                                            if (isCurrentReadAloud && readAloudViewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_menu_book
+                                                        } else R.drawable.ic_download), 
                                                         contentDescription = null, 
                                                         modifier = Modifier.size(20.dp)
                                                     )
@@ -321,9 +312,9 @@ fun BookDetailScreen(
                                             ) {
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     Icon(
-                                                        if (isDownloaded) {
-                                                            if (isCurrentAudio && audiobookViewModel.isPlaying) Icons.Default.Pause else Icons.Default.Headset
-                                                        } else Icons.Default.Download, 
+                                                        painterResource(if (isDownloaded) {
+                                                            if (isCurrentAudio && audiobookViewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_headset
+                                                        } else R.drawable.ic_download), 
                                                         contentDescription = null, 
                                                         modifier = Modifier.size(20.dp)
                                                     )
@@ -353,7 +344,7 @@ fun BookDetailScreen(
                                             ) {
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     Icon(
-                                                        if (isDownloaded) Icons.Default.Book else Icons.Default.Download, 
+                                                        painterResource(if (isDownloaded) R.drawable.ic_book else R.drawable.ic_download), 
                                                         contentDescription = null, 
                                                         modifier = Modifier.size(20.dp)
                                                     )
@@ -501,7 +492,7 @@ fun BookDetailScreen(
                     .size(32.dp)
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), CircleShape)
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(18.dp))
+                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back", modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -510,7 +501,7 @@ fun BookDetailScreen(
 @Composable
 fun FormatIndicator(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int,
     isAvailable: Boolean
 ) {
     val alpha = if (isAvailable) 1f else 0.38f
@@ -522,7 +513,7 @@ fun FormatIndicator(
         modifier = Modifier.alpha(alpha)
     ) {
         Icon(
-            imageVector = icon,
+            painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier.size(16.dp),
             tint = color

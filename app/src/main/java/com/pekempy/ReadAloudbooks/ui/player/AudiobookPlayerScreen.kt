@@ -5,9 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -116,7 +115,7 @@ fun AudiobookPlayerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close")
+                        Icon(painterResource(R.drawable.ic_keyboard_arrow_down), contentDescription = "Close")
                     }
                     Text(
                         text = "NOW PLAYING",
@@ -132,7 +131,7 @@ fun AudiobookPlayerScreen(
                             showSleepTimerSheet = true 
                         }) {
                             Icon(
-                                if (viewModel.sleepTimerRemaining > 0 || viewModel.isWaitingForChapterEnd) Icons.Default.Snooze else Icons.Default.Bedtime,
+                                painterResource(if (viewModel.sleepTimerRemaining > 0 || viewModel.isWaitingForChapterEnd) R.drawable.ic_snooze else R.drawable.ic_bedtime),
                                 contentDescription = "Sleep Timer",
                                 tint = if (viewModel.sleepTimerRemaining > 0 || viewModel.isWaitingForChapterEnd) MaterialTheme.colorScheme.primary else LocalContentColor.current
                             )
@@ -228,13 +227,13 @@ fun AudiobookPlayerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { viewModel.rewind10s() }) {
-                        Icon(Icons.Default.Replay10, contentDescription = "Rewind 10s", Modifier.size(32.dp))
+                        Icon(painterResource(R.drawable.ic_replay_10), contentDescription = "Rewind 10s", Modifier.size(32.dp))
                     }
                     IconButton(onClick = { 
                         if (viewModel.chapters.isNotEmpty()) {
                         }
                     }) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", Modifier.size(40.dp))
+                        Icon(painterResource(R.drawable.ic_skip_previous), contentDescription = "Previous", Modifier.size(40.dp))
                     }
                     FilledIconButton(
                         onClick = { viewModel.togglePlayPause() },
@@ -242,7 +241,7 @@ fun AudiobookPlayerScreen(
                         shape = RoundedCornerShape(24.dp)
                     ) {
                         Icon(
-                            if (viewModel.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            painterResource(if (viewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow),
                             contentDescription = "Play/Pause",
                             Modifier.size(40.dp)
                         )
@@ -251,10 +250,10 @@ fun AudiobookPlayerScreen(
                         if (viewModel.chapters.isNotEmpty()) {
                         }
                     }) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "Next", Modifier.size(40.dp))
+                        Icon(painterResource(R.drawable.ic_skip_next), contentDescription = "Next", Modifier.size(40.dp))
                     }
                     IconButton(onClick = { viewModel.forward30s() }) {
-                        Icon(Icons.Default.Forward30, contentDescription = "Forward 30s", Modifier.size(32.dp))
+                        Icon(painterResource(R.drawable.ic_forward_30), contentDescription = "Forward 30s", Modifier.size(32.dp))
                     }
                 }
 
@@ -271,7 +270,7 @@ fun AudiobookPlayerScreen(
                     
                     if (book?.hasReadAloud == true) {
                         IconButton(onClick = { onSwitchToReadAloud(bookId) }) {
-                            Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Read-Aloud")
+                            Icon(painterResource(R.drawable.ic_menu_book), contentDescription = "Read-Aloud")
                         }
                     }
 
@@ -279,7 +278,7 @@ fun AudiobookPlayerScreen(
                         onClick = { showChaptersSheet = true },
                         modifier = Modifier.align(Alignment.CenterEnd)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters")
+                        Icon(painterResource(R.drawable.ic_list), contentDescription = "Chapters")
                     }
                 }
             }

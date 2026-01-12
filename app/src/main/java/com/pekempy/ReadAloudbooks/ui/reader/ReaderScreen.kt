@@ -6,9 +6,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -121,7 +120,7 @@ fun ReaderScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color(theme.textInt))
+                    Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back", tint = Color(theme.textInt))
                 }
                 Text(
                     viewModel.epubTitle, 
@@ -134,10 +133,10 @@ fun ReaderScreen(
                     viewModel.clearSearch()
                     showSearchSheet = true 
                 }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(theme.textInt))
+                    Icon(painterResource(R.drawable.ic_search), contentDescription = "Search", tint = Color(theme.textInt))
                 }
                 IconButton(onClick = { viewModel.showControls = !viewModel.showControls }) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(theme.textInt))
+                    Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = Color(theme.textInt))
                 }
             }
 
@@ -813,7 +812,7 @@ fun ReaderControls(
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (currentChapter > 0) onChapterChange(currentChapter - 1) }) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Prev Chapter")
+                    Icon(painterResource(R.drawable.ic_skip_previous), contentDescription = "Prev Chapter")
                 }
                 Slider(
                     value = currentChapter.toFloat(),
@@ -822,7 +821,7 @@ fun ReaderControls(
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = { if (currentChapter < totalChapters - 1) onChapterChange(currentChapter + 1) }) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next Chapter")
+                    Icon(painterResource(R.drawable.ic_skip_next), contentDescription = "Next Chapter")
                 }
             }
             Text("Chapter ${currentChapter + 1} of $totalChapters", style = MaterialTheme.typography.labelSmall)
@@ -830,7 +829,7 @@ fun ReaderControls(
             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = contentColor.copy(alpha = 0.2f))
             
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.TextFormat, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(painterResource(R.drawable.ic_text_format), contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Slider(
                     value = userSettings.readerFontSize,
@@ -838,7 +837,7 @@ fun ReaderControls(
                     valueRange = 12f..36f,
                     modifier = Modifier.weight(1f)
                 )
-                Icon(Icons.Default.TextFormat, contentDescription = null, modifier = Modifier.size(24.dp))
+                Icon(painterResource(R.drawable.ic_text_format), contentDescription = null, modifier = Modifier.size(24.dp))
             }
             
             Row(

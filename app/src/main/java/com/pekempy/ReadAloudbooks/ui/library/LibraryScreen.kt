@@ -13,13 +13,9 @@ import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Text
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -44,10 +40,11 @@ import com.pekempy.ReadAloudbooks.ui.components.HomeSection
 import com.pekempy.ReadAloudbooks.ui.components.CategoryListItem
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.filled.Book
 import androidx.compose.runtime.*
 import androidx.compose.foundation.Image
-import com.pekempy.ReadAloudbooks.R
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +104,7 @@ fun LibraryScreen(
                         singleLine = true,
                         leadingIcon = {
                             IconButton(onClick = { isSearchMode = false; viewModel.onSearchQueryChange("") }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = null)
                             }
                         }
                     )
@@ -115,7 +112,7 @@ fun LibraryScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (viewModel.selectedFilter != null) {
                             IconButton(onClick = { viewModel.setViewMode(viewModel.currentViewMode) }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = null)
                             }
                             Text(
                                 viewModel.selectedFilter!!,
@@ -148,29 +145,29 @@ fun LibraryScreen(
                     Row {
                         if (viewModel.currentViewMode != LibraryViewModel.ViewMode.Downloads && viewModel.currentViewMode != LibraryViewModel.ViewMode.Home) {
                             IconButton(onClick = { isSearchMode = true }) {
-                                Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(20.dp))
+                                Icon(painterResource(R.drawable.ic_search), contentDescription = "Search", modifier = Modifier.size(20.dp))
                             }
                             IconButton(onClick = { showSortMenu = true }) {
-                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort", modifier = Modifier.size(20.dp))
+                                Icon(painterResource(R.drawable.ic_sort), contentDescription = "Sort", modifier = Modifier.size(20.dp))
                             }
                             DropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false }
                             ) {
                                 LibraryViewModel.SortOption.values().forEach { option ->
-                                    val (label, icon) = when (option) {
-                                        LibraryViewModel.SortOption.TitleAsc -> "Title (a-z)" to Icons.Default.SortByAlpha
-                                        LibraryViewModel.SortOption.TitleDesc -> "Title (z-a)" to Icons.Default.SortByAlpha
-                                        LibraryViewModel.SortOption.AuthorAsc -> "Author (a-z)" to Icons.Default.Person
-                                        LibraryViewModel.SortOption.AuthorDesc -> "Author (z-a)" to Icons.Default.Person
-                                        LibraryViewModel.SortOption.SeriesAsc -> "Series (a-z)" to Icons.AutoMirrored.Filled.List
-                                        LibraryViewModel.SortOption.SeriesDesc -> "Series (z-a)" to Icons.AutoMirrored.Filled.List
-                                        LibraryViewModel.SortOption.AddedAsc -> "Oldest First" to Icons.Default.History
-                                        LibraryViewModel.SortOption.AddedDesc -> "Newest First" to Icons.Default.CalendarToday
+                                    val (label, iconRes) = when (option) {
+                                        LibraryViewModel.SortOption.TitleAsc -> "Title (a-z)" to R.drawable.ic_sort_by_alpha
+                                        LibraryViewModel.SortOption.TitleDesc -> "Title (z-a)" to R.drawable.ic_sort_by_alpha
+                                        LibraryViewModel.SortOption.AuthorAsc -> "Author (a-z)" to R.drawable.ic_person
+                                        LibraryViewModel.SortOption.AuthorDesc -> "Author (z-a)" to R.drawable.ic_person
+                                        LibraryViewModel.SortOption.SeriesAsc -> "Series (a-z)" to R.drawable.ic_list
+                                        LibraryViewModel.SortOption.SeriesDesc -> "Series (z-a)" to R.drawable.ic_list
+                                        LibraryViewModel.SortOption.AddedAsc -> "Oldest First" to R.drawable.ic_history
+                                        LibraryViewModel.SortOption.AddedDesc -> "Newest First" to R.drawable.ic_calendar_today
                                     }
                                     DropdownMenuItem(
                                         text = { Text(label) },
-                                        leadingIcon = { Icon(icon, contentDescription = null) },
+                                        leadingIcon = { Icon(painterResource(iconRes), contentDescription = null) },
                                         onClick = {
                                             viewModel.setSort(option)
                                             showSortMenu = false
@@ -180,7 +177,7 @@ fun LibraryScreen(
                             }
                         }
                         IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
+                            Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings", modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -328,7 +325,7 @@ fun LibraryScreen(
                                         label = { Text("Audiobook") },
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Headphones,
+                                                painterResource(R.drawable.ic_headphones),
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -342,7 +339,7 @@ fun LibraryScreen(
                                         label = { Text("eBook") },
                                         leadingIcon = {
                                             Icon(
-                                                Icons.AutoMirrored.Filled.MenuBook,
+                                                painterResource(R.drawable.ic_menu_book),
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -356,7 +353,7 @@ fun LibraryScreen(
                                         label = { Text("ReadAloud") },
                                         leadingIcon = {
                                             Icon(
-                                                Icons.AutoMirrored.Filled.MenuBook,
+                                                painterResource(R.drawable.ic_menu_book),
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -370,7 +367,7 @@ fun LibraryScreen(
                                         label = { Text("Downloaded") },
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Download,
+                                                painterResource(R.drawable.ic_download),
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -493,7 +490,7 @@ fun LibraryScreen(
                                                 )
                                             }
                                             IconButton(onClick = { bookToDelete = book }) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Cancel Download", tint = MaterialTheme.colorScheme.error)
+                                                Icon(painterResource(R.drawable.ic_delete), contentDescription = "Cancel Download", tint = MaterialTheme.colorScheme.error)
                                             }
                                         }
                                     }

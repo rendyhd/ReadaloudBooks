@@ -6,8 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.res.painterResource
+import com.pekempy.ReadAloudbooks.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -228,7 +228,7 @@ fun ReadAloudPlayerScreen(
             ) {
                 IconButton(onClick = onBack) {
                     Icon(
-                        Icons.Default.KeyboardArrowDown, 
+                        painterResource(R.drawable.ic_keyboard_arrow_down), 
                         contentDescription = "Back",
                         tint = Color(theme.textInt)
                     )
@@ -250,7 +250,7 @@ fun ReadAloudPlayerScreen(
                         showSearchSheet = true 
                     }) {
                         Icon(
-                            Icons.Default.Search,
+                            painterResource(R.drawable.ic_search),
                             contentDescription = "Search",
                             tint = Color(theme.textInt)
                         )
@@ -262,14 +262,14 @@ fun ReadAloudPlayerScreen(
                         showSleepTimerSheet = true 
                     }) {
                         Icon(
-                            if (readAloudAudioViewModel.sleepTimerRemaining > 0) Icons.Default.Snooze else Icons.Default.Bedtime,
+                            painterResource(if (readAloudAudioViewModel.sleepTimerRemaining > 0) R.drawable.ic_snooze else R.drawable.ic_bedtime),
                             contentDescription = "Sleep Timer",
                             tint = Color(theme.textInt)
                         )
                     }
                     IconButton(onClick = { readerViewModel.showControls = !readerViewModel.showControls }) {
                         Icon(
-                            Icons.Default.Settings, 
+                            painterResource(R.drawable.ic_settings), 
                             contentDescription = "Preferences",
                             tint = Color(theme.textInt)
                         )
@@ -377,13 +377,13 @@ fun SearchContent(
             label = { Text("Search") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            leadingIcon = { Icon(Icons.Default.Search, null) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_search), null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { 
                         query = ""
                         viewModel.clearSearch()
-                    }) { Icon(Icons.Default.Clear, null) }
+                    }) { Icon(painterResource(R.drawable.ic_clear), null) }
                 }
             }
         )
@@ -535,7 +535,7 @@ fun ReadAloudFullPlayerOverlay(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             IconButton(onClick = onClose, modifier = Modifier.align(Alignment.Start)) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close")
+                Icon(painterResource(R.drawable.ic_keyboard_arrow_down), contentDescription = "Close")
             }
             
             Box(modifier = Modifier.weight(1f).padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
@@ -571,18 +571,18 @@ fun ReadAloudFullPlayerOverlay(
             Spacer(Modifier.height(24.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { viewModel.rewind10s() }) { Icon(Icons.Default.Replay10, null, Modifier.size(32.dp)) }
+                IconButton(onClick = { viewModel.rewind10s() }) { Icon(painterResource(R.drawable.ic_replay_10), null, Modifier.size(32.dp)) }
                 IconButton(onClick = { viewModel.togglePlayPause() }, modifier = Modifier.size(72.dp)) {
-                    Icon(if (viewModel.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, Modifier.size(48.dp))
+                    Icon(painterResource(if (viewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow), null, Modifier.size(48.dp))
                 }
-                IconButton(onClick = { viewModel.forward30s() }) { Icon(Icons.Default.Forward30, null, Modifier.size(32.dp)) }
+                IconButton(onClick = { viewModel.forward30s() }) { Icon(painterResource(R.drawable.ic_forward_30), null, Modifier.size(32.dp)) }
             }
             
             Spacer(Modifier.height(32.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = onShowSpeed) { Text("${"%.2f".format(viewModel.playbackSpeed)}x Speed") }
-                IconButton(onClick = onShowChapters) { Icon(Icons.Default.List, null) }
+                IconButton(onClick = onShowChapters) { Icon(painterResource(R.drawable.ic_list), null) }
             }
         }
     }
@@ -684,7 +684,7 @@ fun ReadAloudMinimalCard(
                 )
             ) {
                 Icon(
-                    if (audiobookViewModel.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    painterResource(if (audiobookViewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow),
                     contentDescription = "Play/Pause"
                 )
             }

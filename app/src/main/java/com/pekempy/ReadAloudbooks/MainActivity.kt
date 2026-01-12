@@ -11,8 +11,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -118,6 +116,11 @@ class MainActivity : ComponentActivity() {
                 
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
+                
+                val shouldShowNavBar = currentRoute != null && 
+                    !currentRoute.startsWith("reader") && 
+                    !currentRoute.startsWith("player") &&
+                    currentRoute != "login"
 
 
 
@@ -131,8 +134,14 @@ class MainActivity : ComponentActivity() {
                                 navController = navController
                             )
                             
-                            if (currentRoute?.startsWith("library") == true) {
+                            if (shouldShowNavBar) {
                                 AppNavigationBar(
+                                    currentRoute = currentRoute,
+                                    onNavigateToLibrary = {
+                                        navController.navigate("library") {
+                                            popUpTo("library") { inclusive = true }
+                                        }
+                                    },
                                     currentViewMode = libraryViewModel.currentViewMode,
                                     onViewModeChange = { libraryViewModel.setViewMode(it) },
                                     hasDownloads = libraryViewModel.downloadingBooks.isNotEmpty(),
