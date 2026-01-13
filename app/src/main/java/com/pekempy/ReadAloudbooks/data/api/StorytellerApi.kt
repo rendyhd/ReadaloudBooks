@@ -30,4 +30,10 @@ interface StorytellerApi {
         @Path("uuid") uuid: String,
         @Body position: Position
     )
+
+    @POST("api/v2/books/{uuid}/process")
+    suspend fun processBook(
+        @Path("uuid") uuid: String,
+        @Query("restart") restart: Boolean? = null
+    )
 }

@@ -20,6 +20,11 @@ data class Book(
     val isAudiobookDownloaded: Boolean = false,
     val isEbookDownloaded: Boolean = false,
     val isReadAloudDownloaded: Boolean = false,
+    val isReadAloudQueued: Boolean = false,
+    val processingStatus: String? = null,
+    val currentProcessingStage: String? = null,
+    val processingProgress: Float? = null,
+    val queuePosition: Int? = null,
     val progress: Float? = null,
     val ebookCoverUrl: String? = null,
     val audiobookCoverUrl: String? = null

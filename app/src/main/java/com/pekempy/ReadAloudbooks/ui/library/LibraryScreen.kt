@@ -59,6 +59,7 @@ fun LibraryScreen(
     onLogout: () -> Unit
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
+    var showFilterMenu by remember { mutableStateOf(false) }
     var isSearchMode by remember { mutableStateOf(false) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var selectedBookForMenu by remember { mutableStateOf<Book?>(null) }
@@ -155,6 +156,7 @@ fun LibraryScreen(
                                     LibraryViewModel.ViewMode.Authors -> "Authors"
                                     LibraryViewModel.ViewMode.Series -> "Series"
                                     LibraryViewModel.ViewMode.Downloads -> "Active Downloads"
+                                    LibraryViewModel.ViewMode.Processing -> "Server Processing"
                                 },
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
@@ -167,9 +169,56 @@ fun LibraryScreen(
                             IconButton(onClick = { isSearchMode = true }) {
                                 Icon(painterResource(R.drawable.ic_search), contentDescription = "Search", modifier = Modifier.size(20.dp))
                             }
+                            IconButton(onClick = { showFilterMenu = true }) {
+                                Icon(
+                                    painterResource(R.drawable.ic_filter_alt),
+                                    contentDescription = "Filter", 
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (viewModel.filterHasAudiobook || viewModel.filterHasEbook || viewModel.filterHasReadAloud || viewModel.filterDownloaded || viewModel.filterCanCreateReadAloud) 
+                                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(painterResource(R.drawable.ic_sort), contentDescription = "Sort", modifier = Modifier.size(20.dp))
                             }
+                            
+                            DropdownMenu(
+                                expanded = showFilterMenu,
+                                onDismissRequest = { showFilterMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Audiobooks") },
+                                    leadingIcon = { Icon(painterResource(R.drawable.ic_headphones), contentDescription = null) },
+                                    trailingIcon = { if (viewModel.filterHasAudiobook) Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    onClick = { viewModel.toggleAudiobookFilter() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("eBooks") },
+                                    leadingIcon = { Icon(painterResource(R.drawable.ic_book), contentDescription = null) },
+                                    trailingIcon = { if (viewModel.filterHasEbook) Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    onClick = { viewModel.toggleEbookFilter() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("ReadAlouds") },
+                                    leadingIcon = { Icon(painterResource(R.drawable.ic_menu_book), contentDescription = null) },
+                                    trailingIcon = { if (viewModel.filterHasReadAloud) Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    onClick = { viewModel.toggleReadAloudFilter() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Downloaded") },
+                                    leadingIcon = { Icon(painterResource(R.drawable.ic_download), contentDescription = null) },
+                                    trailingIcon = { if (viewModel.filterDownloaded) Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    onClick = { viewModel.toggleDownloadedFilter() }
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                DropdownMenuItem(
+                                    text = { Text("Can create readaloud") },
+                                    leadingIcon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                                    trailingIcon = { if (viewModel.filterCanCreateReadAloud) Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    onClick = { viewModel.toggleCanCreateReadAloudFilter() }
+                                )
+                            }
+
                             DropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false }
@@ -331,7 +380,7 @@ fun LibraryScreen(
                                 }
                             }
                         } else {
-                        if (targetMode != LibraryViewModel.ViewMode.Downloads) {
+                        if (targetMode != LibraryViewModel.ViewMode.Downloads && targetMode != LibraryViewModel.ViewMode.Processing) {
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -388,6 +437,20 @@ fun LibraryScreen(
                                         leadingIcon = {
                                             Icon(
                                                 painterResource(R.drawable.ic_download),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    )
+                                }
+                                item {
+                                    FilterChip(
+                                        selected = viewModel.filterCanCreateReadAloud,
+                                        onClick = { viewModel.toggleCanCreateReadAloudFilter() },
+                                        label = { Text("Can Create ReadAloud") },
+                                        leadingIcon = {
+                                            Icon(
+                                                painterResource(R.drawable.ic_add),
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -511,6 +574,101 @@ fun LibraryScreen(
                                             }
                                             IconButton(onClick = { bookToDelete = book }) {
                                                 Icon(painterResource(R.drawable.ic_delete), contentDescription = "Cancel Download", tint = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (targetMode == LibraryViewModel.ViewMode.Processing) {
+                            val processingBooks = viewModel.books.filter { it.isReadAloudQueued }
+                                .sortedBy { it.queuePosition ?: Int.MAX_VALUE }
+                            LazyColumn(
+                                contentPadding = contentPadding,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(processingBooks) { book ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            AsyncImage(
+                                                model = book.coverUrl,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(80.dp)
+                                                    .clip(RoundedCornerShape(8.dp)),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                            Spacer(Modifier.width(16.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    book.title,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    book.author,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                                
+                                                Spacer(Modifier.height(12.dp))
+                                                
+                                                val progress = book.processingProgress ?: 0f
+                                                val stage = book.currentProcessingStage ?: "Queued"
+                                                val queuePos = book.queuePosition
+                                                val isError = book.processingStatus == "ERROR"
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = if (isError) "Processing Error" else stage.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                                    )
+                                                    
+                                                    if (isError) {
+                                                        IconButton(
+                                                            onClick = { viewModel.retryProcessing(book.id) },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                painterResource(R.drawable.ic_history),
+                                                                contentDescription = "Retry",
+                                                                modifier = Modifier.size(16.dp),
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                    } else if (queuePos != null && queuePos > 0) {
+                                                        Text(
+                                                            text = "Queue: #$queuePos",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.secondary
+                                                        )
+                                                    }
+                                                }
+                                                
+                                                Spacer(Modifier.height(4.dp))
+                                                
+                                                LinearProgressIndicator(
+                                                    progress = { progress },
+                                                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                                    trackColor = (if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f)
+                                                )
+                                                
+                                                Text(
+                                                    text = "${(progress * 100).toInt()}%",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.align(Alignment.End),
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             }
                                         }
                                     }

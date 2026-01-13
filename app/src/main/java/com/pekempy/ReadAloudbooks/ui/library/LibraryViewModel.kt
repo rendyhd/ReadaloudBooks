@@ -55,12 +55,15 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
 
     var downloadingBooks = mutableStateMapOf<String, DownloadStatus>()
 
-    enum class ViewMode { Home, Library, Authors, Series, Downloads }
+    enum class ViewMode { Home, Library, Authors, Series, Downloads, Processing }
     var currentViewMode by mutableStateOf(ViewMode.Home)
     
     var continueReadingBooks by mutableStateOf<List<Book>>(emptyList())
     var continueSeriesBooks by mutableStateOf<List<Book>>(emptyList())
     var downloadedBooks by mutableStateOf<List<Book>>(emptyList())
+    
+    val totalProcessingCount: Int get() = allBooks.count { it.isReadAloudQueued }
+    val hasProcessing: Boolean get() = allBooks.any { it.isReadAloudQueued }
     
     var selectedFilter: String? by mutableStateOf(null)
     
@@ -78,6 +81,7 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
     var filterHasEbook by mutableStateOf(false)
     var filterHasReadAloud by mutableStateOf(false)
     var filterDownloaded by mutableStateOf(false)
+    var filterCanCreateReadAloud by mutableStateOf(false)
 
     fun toggleAudiobookFilter() { 
         filterHasAudiobook = !filterHasAudiobook 
@@ -95,10 +99,73 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
         filterDownloaded = !filterDownloaded 
         applyFiltersAndSort()
     }
+    fun toggleCanCreateReadAloudFilter() {
+        filterCanCreateReadAloud = !filterCanCreateReadAloud
+        applyFiltersAndSort()
+    }
 
     init {
         startObservingDownloads()
+        startPollingProcessingBooks()
         loadBooks()
+    }
+
+    private fun startPollingProcessingBooks() {
+        viewModelScope.launch {
+            while (isActive) {
+                val processingBooks = allBooks.filter { it.isReadAloudQueued }
+                if (processingBooks.isNotEmpty()) {
+                    processingBooks.forEach { book ->
+                        try {
+                            val details = AppContainer.apiClientManager.getApi().getBookDetails(book.id)
+                            val ra = details.ReadAloud
+                            if (ra != null) {
+                                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    allBooks = allBooks.map { 
+                                        if (it.id == book.id) {
+                                            it.copy(
+                                                hasReadAloud = !ra.filepath.isNullOrBlank(),
+                                                isReadAloudQueued = ra.filepath.isNullOrBlank() && ra.status != "STOPPED",
+                                                processingStatus = ra.status,
+                                                currentProcessingStage = ra.currentStage,
+                                                processingProgress = ra.stageProgress?.toFloat(),
+                                                queuePosition = ra.queuePosition
+                                            )
+                                        } else it
+                                    }
+                                    applyFiltersAndSort()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("LibraryViewModel", "Error polling book ${book.id}: ${e.message}")
+                        }
+                    }
+                }
+                kotlinx.coroutines.delay(5000) // Poll every 5 seconds
+            }
+        }
+    }
+
+    fun retryProcessing(bookId: String) {
+        viewModelScope.launch {
+            try {
+                AppContainer.apiClientManager.getApi().processBook(bookId, restart = true)
+                loadBooks()
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryViewModel", "Failed to retry processing for $bookId: ${e.message}")
+            }
+        }
+    }
+
+    fun createReadAloud(bookId: String) {
+        viewModelScope.launch {
+            try {
+                AppContainer.apiClientManager.getApi().processBook(bookId)
+                loadBooks()
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryViewModel", "Failed to create readaloud for $bookId: ${e.message}")
+            }
+        }
     }
 
     private fun startObservingDownloads() {
@@ -189,7 +256,7 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
                                        else if (apiBook.audiobook != null) apiManager.getAudiobookCoverUrl(apiBook.uuid)
                                        else apiManager.getCoverUrl(apiBook.uuid),
                             description = apiBook.description,
-                            hasReadAloud = apiBook.ReadAloud != null,
+                            hasReadAloud = apiBook.ReadAloud != null && !apiBook.ReadAloud.filepath.isNullOrBlank(),
                             hasEbook = apiBook.ebook != null,
                             hasAudiobook = apiBook.audiobook != null,
                             syncedUrl = apiManager.getSyncDownloadUrl(apiBook.uuid),
@@ -207,7 +274,12 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
                             isDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isBookDownloaded(AppContainer.context.filesDir, book),
                             isAudiobookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isAudiobookDownloaded(AppContainer.context.filesDir, book),
                             isEbookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isEbookDownloaded(AppContainer.context.filesDir, book),
-                            isReadAloudDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isReadAloudDownloaded(AppContainer.context.filesDir, book)
+                            isReadAloudDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isReadAloudDownloaded(AppContainer.context.filesDir, book),
+                            isReadAloudQueued = apiBook.ReadAloud != null && apiBook.ReadAloud.filepath.isNullOrBlank() && apiBook.ReadAloud.status != "STOPPED",
+                            processingStatus = apiBook.ReadAloud?.status,
+                            currentProcessingStage = apiBook.ReadAloud?.currentStage,
+                            processingProgress = apiBook.ReadAloud?.stageProgress?.toFloat(),
+                            queuePosition = apiBook.ReadAloud?.queuePosition
                         )
                     }
                     applyFiltersAndSort()
@@ -363,6 +435,9 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
         if (filterHasEbook) result = result.filter { it.hasEbook }
         if (filterHasReadAloud) result = result.filter { it.hasReadAloud }
         if (filterDownloaded) result = result.filter { it.isDownloaded }
+        if (filterCanCreateReadAloud) {
+            result = result.filter { !it.hasReadAloud && it.hasEbook && it.hasAudiobook && !it.isReadAloudQueued }
+        }
 
         if (searchQuery.isNotBlank()) {
             val query = searchQuery.trim().lowercase()

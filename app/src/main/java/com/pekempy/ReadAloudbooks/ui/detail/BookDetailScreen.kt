@@ -188,6 +188,44 @@ fun BookDetailScreen(
                             )
                         }
                         
+                        if (book.isReadAloudQueued) {
+                            val isError = book.processingStatus == "ERROR"
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background((if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer).copy(alpha = 0.5f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_history),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    text = if (isError) "Processing failed. Please retry from the Processing tab." else "Server is processing the readaloud for this book",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        } else if (!book.hasReadAloud && book.hasEbook && book.hasAudiobook) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.createReadAloud() },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Create ReadAloud")
+                            }
+                        }
+                        
                         Spacer(modifier = Modifier.height(24.dp))
                         
                         val localProgress = viewModel.localProgress ?: 0f

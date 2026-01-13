@@ -145,7 +145,9 @@ class MainActivity : ComponentActivity() {
                                     currentViewMode = libraryViewModel.currentViewMode,
                                     onViewModeChange = { libraryViewModel.setViewMode(it) },
                                     hasDownloads = libraryViewModel.downloadingBooks.isNotEmpty(),
-                                    downloadCount = libraryViewModel.downloadingBooks.size
+                                    downloadCount = libraryViewModel.downloadingBooks.size,
+                                    hasProcessing = libraryViewModel.hasProcessing,
+                                    processingCount = libraryViewModel.totalProcessingCount
                                 )
                             }
                         }

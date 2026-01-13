@@ -39,7 +39,7 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
                     narrator = response.narrators?.joinToString(", ") { it.name },
                     coverUrl = apiManager.getCoverUrl(response.uuid),
                     description = response.description,
-                    hasReadAloud = response.ReadAloud != null,
+                    hasReadAloud = response.ReadAloud != null && !response.ReadAloud.filepath.isNullOrBlank(),
                     hasEbook = response.ebook != null,
                     hasAudiobook = response.audiobook != null,
                     syncedUrl = apiManager.getSyncDownloadUrl(response.uuid),
@@ -76,6 +76,11 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
                     isAudiobookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isAudiobookDownloaded(AppContainer.context.filesDir, tempBook),
                     isEbookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isEbookDownloaded(AppContainer.context.filesDir, tempBook),
                     isReadAloudDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isReadAloudDownloaded(AppContainer.context.filesDir, tempBook),
+                    isReadAloudQueued = response.ReadAloud != null && response.ReadAloud.filepath.isNullOrBlank() && response.ReadAloud.status != "STOPPED",
+                    processingStatus = response.ReadAloud?.status,
+                    currentProcessingStage = response.ReadAloud?.currentStage,
+                    processingProgress = response.ReadAloud?.stageProgress?.toFloat(),
+                    queuePosition = response.ReadAloud?.queuePosition,
                     progress = this@BookDetailViewModel.localProgress
                 )
             } catch (e: Exception) {
@@ -107,6 +112,18 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
     fun downloadReadAloud(filesDir: java.io.File) {
         val currentBook = book ?: return
         com.pekempy.ReadAloudbooks.data.DownloadManager.download(currentBook, filesDir, com.pekempy.ReadAloudbooks.data.DownloadManager.DownloadType.ReadAloud)
+    }
+
+    fun createReadAloud() {
+        val currentBook = book ?: return
+        viewModelScope.launch {
+            try {
+                AppContainer.apiClientManager.getApi().processBook(currentBook.id)
+                loadBook(currentBook.id)
+            } catch (e: Exception) {
+                android.util.Log.e("BookDetailVM", "Failed to create readaloud: ${e.message}")
+            }
+        }
     }
 
     override fun onCleared() {

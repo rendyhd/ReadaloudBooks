@@ -67,7 +67,12 @@ data class EbookResponse(
 )
 
 data class ReadAloudResponse(
-    val uuid: String
+    val uuid: String,
+    val status: String? = null,
+    val filepath: String? = null,
+    val queuePosition: Int? = null,
+    val currentStage: String? = null,
+    val stageProgress: Double? = null
 )
 
 data class Position(
