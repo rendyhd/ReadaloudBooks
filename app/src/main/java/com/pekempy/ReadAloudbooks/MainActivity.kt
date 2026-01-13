@@ -240,6 +240,9 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate("login") {
                                     popUpTo("library") { inclusive = true }
                                 }
+                            },
+                            onEditBook = { book ->
+                                navController.navigate("edit/${book.id}")
                             }
                         )
                     }
@@ -414,7 +417,30 @@ class MainActivity : ComponentActivity() {
                             },
                             onNavigateToDownloads = {
                                 navController.navigate("storage")
+                            },
+                            onEdit = { id ->
+                                navController.navigate("edit/$id")
                             }
+                        )
+                    }
+                    composable("edit/{bookId}",
+                        enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                        exitTransition = { slideOutHorizontally(targetOffsetX = { it }) },
+                        popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                        popExitTransition = { slideOutHorizontally(targetOffsetX = { -it }) }
+                    ) { backStackEntry ->
+                        val bookId = backStackEntry.arguments?.getString("bookId") ?: return@composable
+                        val editViewModel = viewModel<com.pekempy.ReadAloudbooks.ui.edit.EditBookViewModel>(
+                            factory = object : ViewModelProvider.Factory {
+                                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                                    return com.pekempy.ReadAloudbooks.ui.edit.EditBookViewModel(repository) as T
+                                }
+                            }
+                        )
+                        com.pekempy.ReadAloudbooks.ui.edit.EditBookScreen(
+                            viewModel = editViewModel,
+                            bookId = bookId,
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable(

@@ -27,5 +27,6 @@ data class Book(
     val queuePosition: Int? = null,
     val progress: Float? = null,
     val ebookCoverUrl: String? = null,
-    val audiobookCoverUrl: String? = null
+    val audiobookCoverUrl: String? = null,
+    val updatedAt: String? = null
 )

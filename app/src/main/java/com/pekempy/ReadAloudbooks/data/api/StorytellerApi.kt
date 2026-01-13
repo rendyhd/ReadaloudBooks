@@ -36,4 +36,23 @@ interface StorytellerApi {
         @Path("uuid") uuid: String,
         @Query("restart") restart: Boolean? = null
     )
+
+    @Multipart
+    @PUT("api/v2/books/{uuid}")
+    suspend fun updateBook(
+        @Path("uuid") uuid: String,
+        @Part parts: List<okhttp3.MultipartBody.Part>
+    ): BookResponse
+
+    @GET("api/v2/creators")
+    suspend fun getCreators(): List<AuthorResponse>
+
+    @GET("api/v2/series")
+    suspend fun getSeries(): List<SeriesResponse>
+
+    @GET("api/v2/tags")
+    suspend fun getTags(): List<TagResponse>
+
+    @GET("api/v2/collections")
+    suspend fun getCollections(): List<SeriesResponse>
 }

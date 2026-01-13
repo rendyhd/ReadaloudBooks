@@ -40,7 +40,7 @@ class ApiClientManager {
         token = authToken
 
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = HttpLoggingInterceptor.Level.BODY
         }
 
         val authInterceptor = Interceptor { chain ->
@@ -73,16 +73,19 @@ class ApiClientManager {
         return api ?: throw IllegalStateException("API not initialized. Call updateConfig first.")
     }
     
-    fun getEbookCoverUrl(bookUuid: String): String {
-        return "${baseUrl}/api/v2/books/$bookUuid/cover"
+    fun getEbookCoverUrl(bookUuid: String, timestamp: String? = null): String {
+        val base = "${baseUrl}/api/v2/books/$bookUuid/cover"
+        return if (timestamp != null) "$base?v=$timestamp" else base
     }
 
-    fun getAudiobookCoverUrl(bookUuid: String): String {
-        return "${baseUrl}/api/v2/books/$bookUuid/cover?audio"
+    fun getAudiobookCoverUrl(bookUuid: String, timestamp: String? = null): String {
+        val base = "${baseUrl}/api/v2/books/$bookUuid/cover?audio"
+        return if (timestamp != null) "$base&v=$timestamp" else base
     }
 
-    fun getCoverUrl(bookUuid: String): String {
-        return "${baseUrl}/api/v2/books/$bookUuid/cover"
+    fun getCoverUrl(bookUuid: String, timestamp: String? = null): String {
+        val base = "${baseUrl}/api/v2/books/$bookUuid/cover"
+        return if (timestamp != null) "$base?v=$timestamp" else base
     }
 
     fun getSyncDownloadUrl(bookUuid: String): String {

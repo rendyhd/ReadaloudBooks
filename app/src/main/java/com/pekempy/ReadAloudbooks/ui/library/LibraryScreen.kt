@@ -56,7 +56,8 @@ fun LibraryScreen(
     onPlayReadAloud: (Book) -> Unit,
     onPlayAudiobook: (Book) -> Unit,
     onSettingsClick: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onEditBook: (Book) -> Unit
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     var showFilterMenu by remember { mutableStateOf(false) }
@@ -261,7 +262,8 @@ fun LibraryScreen(
             onPlayReadAloud = onPlayReadAloud,
             onPlayAudiobook = onPlayAudiobook,
             onMarkFinished = { viewModel.deleteProgress(it.id) },
-            onMarkUnread = { viewModel.deleteProgress(it.id) }
+            onMarkUnread = { viewModel.deleteProgress(it.id) },
+            onEdit = onEditBook
         )
 
         if (bookToDelete != null) {

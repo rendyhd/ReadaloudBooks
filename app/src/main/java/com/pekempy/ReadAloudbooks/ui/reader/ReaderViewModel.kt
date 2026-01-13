@@ -827,7 +827,7 @@ class ReaderViewModel(
                      author = apiBook.authors.joinToString(", ") { it.name },
                      series = apiSeries?.name ?: apiCollection?.name,
                      seriesIndex = apiSeries?.seriesIndex ?: apiCollection?.seriesIndex,
-                     hasReadAloud = apiBook.ReadAloud != null,
+                     hasReadAloud = apiBook.readaloud != null,
                      hasEbook = apiBook.ebook != null,
                      hasAudiobook = apiBook.audiobook != null,
                      syncedUrl = apiManager.getSyncDownloadUrl(apiBook.uuid),

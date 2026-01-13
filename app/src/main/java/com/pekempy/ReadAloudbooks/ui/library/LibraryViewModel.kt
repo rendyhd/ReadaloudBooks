@@ -118,7 +118,7 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
                     processingBooks.forEach { book ->
                         try {
                             val details = AppContainer.apiClientManager.getApi().getBookDetails(book.id)
-                            val ra = details.ReadAloud
+                            val ra = details.readaloud
                             if (ra != null) {
                                 withContext(kotlinx.coroutines.Dispatchers.Main) {
                                     allBooks = allBooks.map { 
@@ -252,11 +252,11 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
                             title = apiBook.title,
                             author = apiBook.authors.joinToString(", ") { it.name },
                             narrator = apiBook.narrators?.joinToString(", ") { it.name },
-                            coverUrl = if (apiBook.ebook != null) apiManager.getEbookCoverUrl(apiBook.uuid) 
-                                       else if (apiBook.audiobook != null) apiManager.getAudiobookCoverUrl(apiBook.uuid)
-                                       else apiManager.getCoverUrl(apiBook.uuid),
+                            coverUrl = if (apiBook.ebook != null) apiManager.getEbookCoverUrl(apiBook.uuid, apiBook.updatedAt) 
+                                        else if (apiBook.audiobook != null) apiManager.getAudiobookCoverUrl(apiBook.uuid, apiBook.updatedAt)
+                                        else apiManager.getCoverUrl(apiBook.uuid, apiBook.updatedAt),
                             description = apiBook.description,
-                            hasReadAloud = apiBook.ReadAloud != null && !apiBook.ReadAloud.filepath.isNullOrBlank(),
+                            hasReadAloud = apiBook.readaloud != null && !apiBook.readaloud.filepath.isNullOrBlank(),
                             hasEbook = apiBook.ebook != null,
                             hasAudiobook = apiBook.audiobook != null,
                             syncedUrl = apiManager.getSyncDownloadUrl(apiBook.uuid),
@@ -266,20 +266,21 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
                             seriesIndex = apiBook.series?.firstNotNullOfOrNull { it.seriesIndex }
                                 ?: apiBook.collections?.firstNotNullOfOrNull { it.seriesIndex },
                             addedDate = System.currentTimeMillis(),
-                            ebookCoverUrl = if (apiBook.ebook != null) apiManager.getEbookCoverUrl(apiBook.uuid) else null,
-                            audiobookCoverUrl = if (apiBook.audiobook != null) apiManager.getAudiobookCoverUrl(apiBook.uuid) else null,
-                            progress = bookProgress[apiBook.uuid]
+                            ebookCoverUrl = if (apiBook.ebook != null) apiManager.getEbookCoverUrl(apiBook.uuid, apiBook.updatedAt) else null,
+                            audiobookCoverUrl = if (apiBook.audiobook != null) apiManager.getAudiobookCoverUrl(apiBook.uuid, apiBook.updatedAt) else null,
+                            progress = bookProgress[apiBook.uuid],
+                            updatedAt = apiBook.updatedAt
                         )
                         book.copy(
                             isDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isBookDownloaded(AppContainer.context.filesDir, book),
                             isAudiobookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isAudiobookDownloaded(AppContainer.context.filesDir, book),
                             isEbookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isEbookDownloaded(AppContainer.context.filesDir, book),
                             isReadAloudDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isReadAloudDownloaded(AppContainer.context.filesDir, book),
-                            isReadAloudQueued = apiBook.ReadAloud != null && apiBook.ReadAloud.filepath.isNullOrBlank() && apiBook.ReadAloud.status != "STOPPED",
-                            processingStatus = apiBook.ReadAloud?.status,
-                            currentProcessingStage = apiBook.ReadAloud?.currentStage,
-                            processingProgress = apiBook.ReadAloud?.stageProgress?.toFloat(),
-                            queuePosition = apiBook.ReadAloud?.queuePosition
+                            isReadAloudQueued = apiBook.readaloud != null && apiBook.readaloud.filepath.isNullOrBlank() && apiBook.readaloud.status != "STOPPED",
+                            processingStatus = apiBook.readaloud?.status,
+                            currentProcessingStage = apiBook.readaloud?.currentStage,
+                            processingProgress = apiBook.readaloud?.stageProgress?.toFloat(),
+                            queuePosition = apiBook.readaloud?.queuePosition
                         )
                     }
                     applyFiltersAndSort()

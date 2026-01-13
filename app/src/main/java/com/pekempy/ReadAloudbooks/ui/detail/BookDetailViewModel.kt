@@ -37,9 +37,9 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
                     title = response.title,
                     author = response.authors.joinToString(", ") { it.name },
                     narrator = response.narrators?.joinToString(", ") { it.name },
-                    coverUrl = apiManager.getCoverUrl(response.uuid),
+                    coverUrl = apiManager.getCoverUrl(response.uuid, response.updatedAt),
                     description = response.description,
-                    hasReadAloud = response.ReadAloud != null && !response.ReadAloud.filepath.isNullOrBlank(),
+                    hasReadAloud = response.readaloud != null && !response.readaloud.filepath.isNullOrBlank(),
                     hasEbook = response.ebook != null,
                     hasAudiobook = response.audiobook != null,
                     syncedUrl = apiManager.getSyncDownloadUrl(response.uuid),
@@ -48,8 +48,9 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
                     series = seriesName,
                     seriesIndex = seriesIdx,
                     addedDate = System.currentTimeMillis(),
-                    ebookCoverUrl = if (response.ebook != null) apiManager.getEbookCoverUrl(response.uuid) else null,
-                    audiobookCoverUrl = if (response.audiobook != null) apiManager.getAudiobookCoverUrl(response.uuid) else null
+                    ebookCoverUrl = if (response.ebook != null) apiManager.getEbookCoverUrl(response.uuid, response.updatedAt) else null,
+                    audiobookCoverUrl = if (response.audiobook != null) apiManager.getAudiobookCoverUrl(response.uuid, response.updatedAt) else null,
+                    updatedAt = response.updatedAt
                 )
                 
                 val progressStr = repository.getBookProgress(uuid).first()
@@ -76,11 +77,11 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
                     isAudiobookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isAudiobookDownloaded(AppContainer.context.filesDir, tempBook),
                     isEbookDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isEbookDownloaded(AppContainer.context.filesDir, tempBook),
                     isReadAloudDownloaded = com.pekempy.ReadAloudbooks.util.DownloadUtils.isReadAloudDownloaded(AppContainer.context.filesDir, tempBook),
-                    isReadAloudQueued = response.ReadAloud != null && response.ReadAloud.filepath.isNullOrBlank() && response.ReadAloud.status != "STOPPED",
-                    processingStatus = response.ReadAloud?.status,
-                    currentProcessingStage = response.ReadAloud?.currentStage,
-                    processingProgress = response.ReadAloud?.stageProgress?.toFloat(),
-                    queuePosition = response.ReadAloud?.queuePosition,
+                    isReadAloudQueued = response.readaloud != null && response.readaloud.filepath.isNullOrBlank() && response.readaloud.status != "STOPPED",
+                    processingStatus = response.readaloud?.status,
+                    currentProcessingStage = response.readaloud?.currentStage,
+                    processingProgress = response.readaloud?.stageProgress?.toFloat(),
+                    queuePosition = response.readaloud?.queuePosition,
                     progress = this@BookDetailViewModel.localProgress
                 )
             } catch (e: Exception) {

@@ -56,7 +56,8 @@ fun BookDetailScreen(
     onAuthorClick: (String) -> Unit,
     onSeriesClick: (String) -> Unit,
     onRead: (String, Boolean) -> Unit,
-    onNavigateToDownloads: () -> Unit
+    onNavigateToDownloads: () -> Unit,
+    onEdit: (String) -> Unit
 ) {
     val context = LocalContext.current
     LaunchedEffect(bookId) {
@@ -71,6 +72,44 @@ fun BookDetailScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
+                            .size(36.dp)
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_arrow_back), 
+                            contentDescription = "Back",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { onEdit(bookId) },
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
+                            .size(36.dp)
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_edit), 
+                            contentDescription = "Edit",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize()) {
             if (viewModel.isLoading) {
@@ -555,16 +594,6 @@ fun BookDetailScreen(
                 }
             }
 
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(4.dp)
-                    .size(32.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), CircleShape)
-            ) {
-                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back", modifier = Modifier.size(18.dp))
-            }
         }
     }
 }

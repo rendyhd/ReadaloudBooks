@@ -302,6 +302,7 @@ fun BookActionMenu(
     onPlayAudiobook: (Book) -> Unit,
     onMarkFinished: (Book) -> Unit,
     onMarkUnread: (Book) -> Unit,
+    onEdit: (Book) -> Unit,
     onRemoveFromHome: ((Book) -> Unit)? = null
 ) {
     if (book == null) return
@@ -358,6 +359,15 @@ fun BookActionMenu(
             leadingIcon = { Icon(painterResource(R.drawable.ic_history), contentDescription = null) },
             onClick = {
                 onMarkUnread(book)
+                onDismissRequest()
+            }
+        )
+
+        DropdownMenuItem(
+            text = { Text("Edit Metadata") },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_edit), contentDescription = null) },
+            onClick = {
+                onEdit(book)
                 onDismissRequest()
             }
         )
