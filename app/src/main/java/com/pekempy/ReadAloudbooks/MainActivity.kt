@@ -101,6 +101,43 @@ class MainActivity : ComponentActivity() {
             ) {
                 val navController = rememberNavController()
 
+                var updateRelease by remember { mutableStateOf<com.pekempy.ReadAloudbooks.util.UpdateChecker.GitHubRelease?>(null) }
+                val context = androidx.compose.ui.platform.LocalContext.current
+                
+                LaunchedEffect(Unit) {
+                    if (!com.pekempy.ReadAloudbooks.util.UpdateChecker.isInstalledFromPlayStore(context)) {
+                        val currentVersion = BuildConfig.VERSION_NAME
+                        val newRelease = com.pekempy.ReadAloudbooks.util.UpdateChecker.checkForUpdate(currentVersion)
+                        if (newRelease != null) {
+                            updateRelease = newRelease
+                        }
+                    }
+                }
+
+                if (updateRelease != null) {
+                    AlertDialog(
+                        onDismissRequest = { updateRelease = null },
+                        title = { Text("Update Available") },
+                        text = { Text("A new version (${updateRelease?.tag_name}) is available. would you like to update?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(updateRelease?.html_url))
+                                    context.startActivity(intent)
+                                    updateRelease = null
+                                }
+                            ) {
+                                Text("Update")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { updateRelease = null }) {
+                                Text("Later")
+                            }
+                        }
+                    )
+                }
+
                 LaunchedEffect(Unit) {
                     val lastBook = repository.lastActiveBook.first()
                     val bookId = lastBook.first
