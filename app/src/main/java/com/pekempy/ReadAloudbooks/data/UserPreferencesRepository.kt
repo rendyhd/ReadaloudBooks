@@ -49,7 +49,6 @@ class UserPreferencesRepository(private val context: Context) {
         val url = preferences[URL]
         val localUrl = preferences[LOCAL_URL]
         
-        // At least one URL must be present, and we need a username
         val username = preferences[USERNAME]
         if ((url != null || localUrl != null) && username != null) {
             UserCredentials(

@@ -170,12 +170,29 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
     }
 
     fun createReadAloud(bookId: String) {
+        val previousBooks = allBooks
+        allBooks = allBooks.map { 
+            if (it.id == bookId) {
+                it.copy(
+                    isReadAloudQueued = true,
+                    processingStatus = "QUEUED",
+                    currentProcessingStage = "Queued",
+                    processingProgress = 0f
+                )
+            } else it
+        }
+        applyFiltersAndSort()
+
         viewModelScope.launch {
             try {
                 AppContainer.apiClientManager.getApi().processBook(bookId)
-                loadBooks()
             } catch (e: Exception) {
                 android.util.Log.e("LibraryViewModel", "Failed to create readaloud for $bookId: ${e.message}")
+                // Revert on failure
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    allBooks = previousBooks
+                    applyFiltersAndSort()
+                }
             }
         }
     }
@@ -419,24 +436,30 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
             when (currentViewMode) {
                 ViewMode.Authors -> allBooks.filter { it.author == selectedFilter }
                 ViewMode.Series -> allBooks.filter { it.series == selectedFilter }
+                ViewMode.Processing -> allBooks.filter { it.isReadAloudQueued }
+                ViewMode.Downloads -> allBooks.filter { downloadingBooks.containsKey(it.id) }
                 else -> allBooks
             }
         } else {
-            allBooks
+            when (currentViewMode) {
+                ViewMode.Processing -> allBooks.filter { it.isReadAloudQueued }
+                ViewMode.Downloads -> allBooks.filter { downloadingBooks.containsKey(it.id) }
+                else -> allBooks
+            }
         }
 
         result = applyGlobalFilters(result)
 
         result = if (currentViewMode == ViewMode.Series && selectedFilter != null) {
-            result.sortedWith(compareBy(nullsLast()) { it.seriesIndex?.padStart(10, '0') })
+            result.sortedWith(compareBy { it.seriesIndex?.toDoubleOrNull() ?: Double.MAX_VALUE })
         } else {
             when (currentSort) {
-                SortOption.TitleAsc -> result.sortedBy { it.title }
-                SortOption.TitleDesc -> result.sortedByDescending { it.title }
-                SortOption.AuthorAsc -> result.sortedBy { it.author }
-                SortOption.AuthorDesc -> result.sortedByDescending { it.author }
-                SortOption.SeriesAsc -> result.sortedBy { it.series ?: "" }
-                SortOption.SeriesDesc -> result.sortedByDescending { it.series ?: "" }
+                SortOption.TitleAsc -> result.sortedBy { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it.title) }
+                SortOption.TitleDesc -> result.sortedByDescending { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it.title) }
+                SortOption.AuthorAsc -> result.sortedBy { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it.author) }
+                SortOption.AuthorDesc -> result.sortedByDescending { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it.author) }
+                SortOption.SeriesAsc -> result.sortedBy { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it.series) }
+                SortOption.SeriesDesc -> result.sortedByDescending { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it.series) }
                 SortOption.AddedAsc -> result.sortedBy { it.addedDate }
                 SortOption.AddedDesc -> result.sortedByDescending { it.addedDate }
             }
@@ -473,12 +496,12 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
     }
 
     fun getUniqueAuthors(): List<String> {
-        val allAuthors = getFilteredMasterList().map { it.author }.distinct().sorted()
+        val allAuthors = getFilteredMasterList().map { it.author }.distinct().sortedBy { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it) }
         return allAuthors.take((currentPage + 1) * LIMIT)
     }
 
     fun getUniqueSeries(): List<String> {
-        val allSeries = getFilteredMasterList().mapNotNull { it.series }.distinct().sorted()
+        val allSeries = getFilteredMasterList().mapNotNull { it.series }.distinct().sortedBy { com.pekempy.ReadAloudbooks.util.StringUtils.normalizeTitle(it) }
         return allSeries.take((currentPage + 1) * LIMIT)
     }
 

@@ -620,13 +620,23 @@ fun LibraryScreen(
                                 }
                             }
                         } else if (targetMode == LibraryViewModel.ViewMode.Processing) {
-                            val processingBooks = viewModel.books.filter { it.isReadAloudQueued }
-                                .sortedBy { it.queuePosition ?: Int.MAX_VALUE }
+                            val processingState = rememberLazyListState()
+                            
+                            LaunchedEffect(processingState.firstVisibleItemIndex) {
+                                if (viewModel.books.isNotEmpty() && processingState.layoutInfo.visibleItemsInfo.isNotEmpty()) {
+                                    val lastVisible = processingState.layoutInfo.visibleItemsInfo.last().index
+                                    if (lastVisible >= viewModel.books.size - 5) {
+                                        viewModel.loadNextPage()
+                                    }
+                                }
+                            }
+
                             LazyColumn(
+                                state = processingState,
                                 contentPadding = contentPadding,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(processingBooks) { book ->
+                                items(viewModel.books.sortedBy { it.queuePosition ?: Int.MAX_VALUE }) { book ->
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(12.dp)

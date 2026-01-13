@@ -19,9 +19,11 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
     var localProgress by mutableStateOf<Float?>(null)
     var serverProgress by mutableStateOf<Float?>(null)
 
-    fun loadBook(uuid: String) {
+    fun loadBook(uuid: String, showLoading: Boolean = true) {
         viewModelScope.launch {
-            isLoading = true
+            if (showLoading) {
+                isLoading = true
+            }
             error = null
             try {
                 val apiManager = AppContainer.apiClientManager
@@ -117,12 +119,21 @@ class BookDetailViewModel(private val repository: UserPreferencesRepository) : V
 
     fun createReadAloud() {
         val currentBook = book ?: return
+        
+        val previousState = currentBook
+        book = currentBook.copy(
+            isReadAloudQueued = true,
+            processingStatus = "QUEUED",
+            currentProcessingStage = "Queued",
+            processingProgress = 0f
+        )
+
         viewModelScope.launch {
             try {
                 AppContainer.apiClientManager.getApi().processBook(currentBook.id)
-                loadBook(currentBook.id)
             } catch (e: Exception) {
                 android.util.Log.e("BookDetailVM", "Failed to create readaloud: ${e.message}")
+                loadBook(currentBook.id, showLoading = false)
             }
         }
     }
