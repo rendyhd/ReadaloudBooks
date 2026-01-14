@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,13 @@ fun ReadAloudPlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
+    DisposableEffect(readAloudAudioViewModel.isPlaying) {
+        view.keepScreenOn = readAloudAudioViewModel.isPlaying
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
     val userSettings = readerViewModel.settings
     var isPlayerExpanded by remember { mutableStateOf(initiallyExpanded) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
