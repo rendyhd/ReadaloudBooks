@@ -50,10 +50,19 @@ object DownloadManager {
             bookDir.mkdirs()
 
             val downloads = mutableListOf<Pair<String, String>>()
+            val hasReadAloud = book.hasReadAloud && !book.syncedUrl.isNullOrBlank()
             
-            val shouldDownloadAudio = (type == DownloadType.All || type == DownloadType.Audio) && book.hasAudiobook
-            val shouldDownloadEbook = (type == DownloadType.All || type == DownloadType.Ebook) && book.hasEbook
-            val shouldDownloadReadAloud = (type == DownloadType.All || type == DownloadType.ReadAloud) && book.hasReadAloud
+            var shouldDownloadAudio = false
+            var shouldDownloadEbook = false
+            var shouldDownloadReadAloud = false
+
+            if (hasReadAloud) {
+                shouldDownloadReadAloud = true
+            } else {
+                shouldDownloadAudio = (type == DownloadType.All || type == DownloadType.Audio) && book.hasAudiobook
+                shouldDownloadEbook = (type == DownloadType.All || type == DownloadType.Ebook) && book.hasEbook
+                shouldDownloadReadAloud = (type == DownloadType.ReadAloud) // book.hasReadAloud already checked via hasReadAloud variable but just in case
+            }
 
             if (shouldDownloadAudio) book.audiobookUrl?.takeIf { it.isNotBlank() }?.let { downloads.add(it to "$baseFileName.m4b") }
             if (shouldDownloadEbook) book.ebookUrl?.takeIf { it.isNotBlank() }?.let { downloads.add(it to "$baseFileName.epub") }
