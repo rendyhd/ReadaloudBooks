@@ -65,8 +65,22 @@ fun ReadAloudPlayerScreen(
     
     val highlightId = readAloudAudioViewModel.currentElementId
     
-    LaunchedEffect(highlightId) {
-        if (highlightId != null && readerViewModel.currentHighlightId != highlightId) {
+    LaunchedEffect(readerViewModel.lazyBook, readAloudAudioViewModel.isLoading) {
+        if (readerViewModel.lazyBook != null && !readAloudAudioViewModel.isLoading) {
+            val audioCh = readAloudAudioViewModel.currentChapterIndex
+            val audioId = readAloudAudioViewModel.currentElementId
+            if (audioCh >= 0 && audioCh != readerViewModel.currentChapterIndex) {
+                 readerViewModel.changeChapter(audioCh, readAloudAudioViewModel.currentPosition)
+            }
+            if (audioId != null) {
+                readerViewModel.currentHighlightId = audioId
+                readerViewModel.forceScrollUpdate()
+            }
+        }
+    }
+
+    LaunchedEffect(highlightId, readAloudAudioViewModel.isLoading) {
+        if (!readAloudAudioViewModel.isLoading && highlightId != null && readerViewModel.currentHighlightId != highlightId) {
             readerViewModel.currentHighlightId = highlightId
             readerViewModel.forceScrollUpdate()
         }
@@ -100,10 +114,12 @@ fun ReadAloudPlayerScreen(
         }
     }
 
-    LaunchedEffect(readAloudAudioViewModel.currentChapterIndex) {
-        val audioCh = readAloudAudioViewModel.currentChapterIndex
-        if (audioCh >= 0 && audioCh != readerViewModel.currentChapterIndex) {
-            readerViewModel.changeChapter(audioCh, readAloudAudioViewModel.currentPosition)
+    LaunchedEffect(readAloudAudioViewModel.currentChapterIndex, readAloudAudioViewModel.isLoading) {
+        if (!readAloudAudioViewModel.isLoading) {
+            val audioCh = readAloudAudioViewModel.currentChapterIndex
+            if (audioCh >= 0 && audioCh != readerViewModel.currentChapterIndex) {
+                readerViewModel.changeChapter(audioCh, readAloudAudioViewModel.currentPosition)
+            }
         }
     }
 

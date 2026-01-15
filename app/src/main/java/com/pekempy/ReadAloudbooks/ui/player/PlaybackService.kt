@@ -1,6 +1,7 @@
 package com.pekempy.ReadAloudbooks.ui.player
 
 import android.content.Intent
+import com.pekempy.ReadAloudbooks.MainActivity
 import android.media.MediaFormat
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
@@ -194,16 +195,29 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, leanPlayer)
             .setBitmapLoader(bitmapLoader)
+            .setSessionActivity(createSessionActivity())
             .build()
     }
 
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaSession?.player
-        if (player != null) {
-            if (!player.playWhenReady || player.mediaItemCount == 0 || player.playbackState == Player.STATE_ENDED) {
-                stopSelf()
-            }
+    private fun createSessionActivity(): android.app.PendingIntent {
+        val intent = android.content.Intent(this, MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("notification_click", true)
         }
+        return android.app.PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        mediaSession?.player?.let { player ->
+            player.pause()
+            player.stop()
+        }
+        stopSelf()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {

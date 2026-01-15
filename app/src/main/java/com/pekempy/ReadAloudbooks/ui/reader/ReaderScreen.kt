@@ -212,7 +212,7 @@ fun EpubWebView(
                     this.settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        useWideViewPort = false
+                        useWideViewPort = true
                         loadWithOverviewMode = true
                     }
                     
@@ -342,7 +342,8 @@ fun EpubWebView(
                     webView.loadDataWithBaseURL(baseUrl, styledHtml, "text/html", "UTF-8", null)
                     webView.scrollTo(0, 0)
                     webView.tag = contentSignature
-                    webView.setTag(com.pekempy.ReadAloudbooks.R.id.highlight_tag, null)
+                    webView.setTag(com.pekempy.ReadAloudbooks.R.id.highlight_tag, highlightId)
+                    webView.setTag(com.pekempy.ReadAloudbooks.R.id.trigger_tag, trigger)
                     webView.setTag(com.pekempy.ReadAloudbooks.R.id.search_tag, null)
                     webView.setTag(com.pekempy.ReadAloudbooks.R.id.anchor_tag, null)
                 }
@@ -355,7 +356,7 @@ fun EpubWebView(
                         
                         if (lastId != id || lastTrigger != trigger) {
                             android.util.Log.d("EpubWebView", "Highlighting: $id (trigger $trigger)")
-                            webView.evaluateJavascript("if (typeof highlightElement === 'function') highlightElement('$id')", null)
+                            webView.evaluateJavascript("if (typeof highlightElement === 'function') highlightElement('$id', 0, true)", null)
                             webView.setTag(com.pekempy.ReadAloudbooks.R.id.highlight_tag, id)
                             webView.setTag(com.pekempy.ReadAloudbooks.R.id.trigger_tag, trigger)
                         }
@@ -413,10 +414,10 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     --text-color: ${theme.text};
                     --font-size: ${userSettings.readerFontSize}px;
                     --font-family: $fontFamily;
-                    --padding-left: 12px;
-                    --padding-right: 24px;
-                    --top-padding: 140px;
-                    --bottom-padding: 180px;
+                    --padding-left: 16px;
+                    --padding-right: 16px;
+                    --top-padding: 100px;
+                    --bottom-padding: 120px;
                     --accent-color: $accentColor;
                 }
                 
@@ -429,6 +430,13 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     background-color: var(--bg-color);
                     color: var(--text-color);
                     -webkit-user-select: none;
+                    
+                    /* Maximize text density */
+                    line-height: 1.5 !important;
+                    hyphens: auto;
+                    -webkit-hyphens: auto;
+                    text-align: justify;
+                    text-indent: 1.5em;
                 }
 
                 #content-container {
@@ -445,6 +453,9 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     
                     column-fill: auto;
                     overflow: visible;
+                    overflow-wrap: break-word;
+                    word-wrap: break-word;
+                    
                     will-change: transform;
                     backface-visibility: hidden;
                     -webkit-backface-visibility: hidden;
@@ -480,14 +491,16 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                 h1, h2, h3 {
                     font-weight: bold !important;
-                }
-
-                h1, h2, h3, p, [id] {
                     break-inside: avoid-column;
                     -webkit-column-break-inside: avoid;
-                    break-inside: avoid;
-                    orphans: 3;
-                    widows: 3;
+                    break-after: avoid;
+                    text-align: left;
+                    text-indent: 0;
+                }
+
+                p, [id] {
+                    orphans: 2;
+                    widows: 2;
                 }
 
                 img {
@@ -529,7 +542,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 let highlightInProgress = false;
                 let pendingHighlight = null;
                 
-                function highlightElement(id, retryCount = 0) {
+                function highlightElement(id, retryCount = 0, animated = true) {
                     if (!id) {
                         if (window.Android) window.Android.onReaderReady();
                         return;
@@ -539,7 +552,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         return;
                     }
                     
-                    if (highlightInProgress && pendingHighlight !== id) {
+                    if (highlightInProgress && pendingHighlight !== id && retryCount === 0) {
                         pendingHighlight = id;
                         return;
                     }
@@ -548,14 +561,14 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     pendingHighlight = null;
                     
                     const el = document.getElementById(id);
-                    if (!el) {
-                        if (retryCount < 15) {
-                            setTimeout(() => highlightElement(id, retryCount + 1), 200);
+                    if (!el || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
+                        if (retryCount < 30) {
+                            setTimeout(() => highlightElement(id, retryCount + 1, animated), 100);
                         } else {
                             highlightInProgress = false;
                             if (window.Android) window.Android.onReaderReady();
                             if (pendingHighlight && pendingHighlight !== id) {
-                                highlightElement(pendingHighlight);
+                                highlightElement(pendingHighlight, 0, animated);
                             }
                         }
                         return;
@@ -574,17 +587,20 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         const rect = el.getBoundingClientRect();
                         const containerRect = container.getBoundingClientRect();
                         
+                        // Use a more stable left calculation
                         const absoluteLeft = rect.left - containerRect.left;
                         const elementCenter = absoluteLeft + (el.offsetWidth / 2);
                         
-                        const targetPage = Math.floor(elementCenter / step);
+                        const targetPage = Math.floor((elementCenter + 1) / step);
                         const totalWidth = container.scrollWidth;
                         const maxPages = Math.max(1, Math.ceil(totalWidth / step));
                         const clampedPage = Math.max(0, Math.min(targetPage, maxPages - 1));
                         
+                        console.log("Highlight: id=" + id + ", absLeft=" + absoluteLeft + ", step=" + step + ", page=" + clampedPage + "/" + maxPages);
+                        
                         if (clampedPage !== currentPage) {
                             currentPage = clampedPage;
-                            updateTransform(true);
+                            updateTransform(animated);
                         }
                     }
                     
@@ -593,7 +609,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     if (pendingHighlight && pendingHighlight !== id) {
                         const nextHighlight = pendingHighlight;
                         pendingHighlight = null;
-                        highlightElement(nextHighlight);
+                        highlightElement(nextHighlight, 0, animated);
                     } else {
                         if (window.Android) window.Android.onReaderReady();
                     }
@@ -606,14 +622,15 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 }
                 
                 function getStep() {
-                    return window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 0;
+                    const width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+                    return Math.floor(width);
                 }
 
                 function updateTransform(animate = true) {
                     const container = document.getElementById('content-container');
                     if (!container) return;
                     const step = getStep();
-                    const offset = currentPage * step;
+                    const offset = Math.round(currentPage * step);
                     
                     if (animate) {
                         container.classList.add('animate');
@@ -622,6 +639,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     }
                     
                     container.style.transform = 'translateX(-' + offset + 'px)';
+                    container.offsetHeight; 
                     
                     if (window.Android) {
                         const totalWidth = container.scrollWidth;
@@ -631,14 +649,14 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         const percent = maxPages > 1 ? (currentPage / (maxPages - 1)) : 0;
                         
                         let bestId = "";
-                        const elements = container.querySelectorAll('[id]');
+                        const elements = container.querySelectorAll('p[id], div[id], h1[id], h2[id], h3[id], section[id], span[id]');
                         for (let i = 0; i < elements.length; i++) {
                             const el = elements[i];
-                            if (el.id === 'content-container' || el.classList.contains('highlight')) continue;
+                            if (el.classList.contains('highlight')) continue;
                             const left = elementLeftAbsolute(el, container);
                             if (left <= offset + 50) {
                                 bestId = el.id;
-                            } else {
+                            } else if (left > offset + step) {
                                 break;
                             }
                         }
@@ -830,15 +848,38 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     const highlightId = ${if (initialHighlightId != null) "'$initialHighlightId'" else "null"};
                     const initialPercent = $initialScrollPercent;
                     
+                    let lastScrollWidth = -1;
+                    let stableCount = 0;
+
                     function stabilizeAndStart() {
                         const container = document.getElementById('content-container');
-                        if (!container || container.scrollWidth <= 0) {
+                        if (!container) {
                             setTimeout(stabilizeAndStart, 100);
                             return;
                         }
                         
+                        const currentWidth = container.scrollWidth;
+                        if (currentWidth <= 100) { 
+                            setTimeout(stabilizeAndStart, 150);
+                            return;
+                        }
+
+                        if (currentWidth === lastScrollWidth) {
+                            stableCount++;
+                        } else {
+                            stableCount = 0;
+                            lastScrollWidth = currentWidth;
+                        }
+
+                        if (stableCount < 2) {
+                            setTimeout(stabilizeAndStart, 150);
+                            return;
+                        }
+                        
+                        console.log("Layout stable. Width: " + currentWidth + ". Start pos: " + initialPercent + ", highlight: " + highlightId);
+                        
                         if (highlightId) {
-                            highlightElement(highlightId);
+                            highlightElement(highlightId, 0, false);
                         } else {
                             scrollToPercent(initialPercent);
                         }

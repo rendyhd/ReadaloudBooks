@@ -10,6 +10,7 @@ import com.pekempy.ReadAloudbooks.data.Book
 import com.pekempy.ReadAloudbooks.data.UserPreferencesRepository
 import com.pekempy.ReadAloudbooks.data.api.AppContainer
 import com.pekempy.ReadAloudbooks.util.DownloadUtils
+import com.pekempy.ReadAloudbooks.util.FormatUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -121,11 +122,6 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
 
                     override fun onPlaybackStateChanged(state: Int) {
                         if (state == Player.STATE_READY) {
-                            val totalDur = controller.duration
-                            if (totalDur > duration) {
-                                duration = totalDur
-                            }
-                            
                             pendingSeekPosition?.let { seekPos ->
                                 val targetPos = seekPos.coerceIn(0, duration)
                                 this@ReadAloudAudioViewModel.seekTo(targetPos)
@@ -239,11 +235,6 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                 }
                 repository.saveLastActiveBook(bookId, "readaloud")
                 
-                withContext(Dispatchers.Main) {
-                    duration = 0
-                    currentPosition = 0
-                }
-                
                 val bookDir = DownloadUtils.getBookDir(filesDir!!, book)
                 val baseFileName = DownloadUtils.getBaseFileName(book)
                 val epubFile = File(bookDir, "$baseFileName (readaloud).epub")
@@ -262,6 +253,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                 createClippedSegments(smilData, spineHrefs, localExtractedFiles, localClipSegments, localChapterOffsets)
                 
                 val calculatedDuration = localClipSegments.sumOf { it.clipEndMs - it.clipBeginMs }
+                android.util.Log.i("ReadAloudAudioVM", "TOTAL BOOK DURATION: ${FormatUtils.formatTime(calculatedDuration)} ($calculatedDuration ms)")
                 val localChaptersList = createChaptersList(localChapterOffsets, spineHrefs, spineTitles, calculatedDuration)
                 
                 val mediaMetadataBuilder = MediaMetadata.Builder()
@@ -284,6 +276,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                 val mediaItems = localClipSegments.map { clip ->
                     val chapter = localChaptersList.findLast { it.startOffset <= clip.cumulativeStartMs }
                     val extras = android.os.Bundle().apply {
+                        putString("bookId", bookId)
                         putLong("globalDurationMs", calculatedDuration)
                         putLong("cumulativeStartMs", clip.cumulativeStartMs)
                         putBoolean("isAudiobookMode", true)
@@ -328,21 +321,40 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                     audioChapterOffsets = localChapterOffsets.mapValues { it.value / 1000.0 }
                     chapters = localChaptersList
                     duration = calculatedDuration
-                    
                     loadedSpineHrefs = spineHrefs
-                    player?.setMediaItems(mediaItems)
-                    player?.prepare()
-                    android.util.Log.d("ReadAloudAudioVM", "Player prepared with ${mediaItems.size} items")
-                }
-                
-                loadProgress(bookId)
-                
-                withContext(Dispatchers.Main) {
-                    if (player?.playbackState == Player.STATE_READY) {
-                        pendingSeekPosition?.let { seekPos ->
-                            seekTo(seekPos)
-                            pendingSeekPosition = null
+                    
+                    val p = player
+                    val isAlreadyPlayingUs = if (p != null && p.mediaItemCount > 0) {
+                        val currentItem = p.getMediaItemAt(0)
+                        val playingBookId = currentItem.mediaMetadata.extras?.getString("bookId")
+                        playingBookId == bookId && p.playbackState != Player.STATE_IDLE
+                    } else false
+
+                    if (!isAlreadyPlayingUs) {
+                        android.util.Log.d("ReadAloudAudioVM", "Player not playing this book ($bookId). Setting media items...")
+                        player?.setMediaItems(mediaItems)
+                        player?.prepare()
+                        
+                        loadProgress(bookId)
+                    } else {
+                        android.util.Log.i("ReadAloudAudioVM", "RE-ADOPTING active session for book $bookId")
+                        p?.let { player ->
+                            val index = player.currentMediaItemIndex
+                            val posInClip = player.currentPosition
+                            if (index >= 0 && index < clipSegments.size) {
+                                val clip = clipSegments[index]
+                                currentPosition = clip.cumulativeStartMs + posInClip
+                                currentChapterIndex = clip.chapterIndex
+                                currentElementId = clip.elementId
+                                android.util.Log.d("ReadAloudAudioVM", "Synced from player: chap=$currentChapterIndex, pos=$currentPosition, el=$currentElementId")
+                            }
                         }
+                        loadProgress(bookId, skipSeek = true)
+                    }
+
+                    if (autoPlay && player?.isPlaying == false) {
+                        player?.play()
+                        android.util.Log.d("ReadAloudAudioVM", "Auto-starting playback")
                     }
                 }
                 
@@ -575,7 +587,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
         return chapterList
     }
     
-    private suspend fun loadProgress(bookId: String) {
+    private suspend fun loadProgress(bookId: String, skipSeek: Boolean = false) {
         val progressStr = repository.getBookProgress(bookId).first()
         val localProgress = UnifiedProgress.fromString(progressStr)
         var finalProgressToUse = localProgress
@@ -625,6 +637,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
         }
         
         finalProgressToUse?.let {
+            if (skipSeek) return@let
             val audioMs = it.audioTimestampMs
             
             if (audioMs > 0) {
@@ -782,7 +795,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                         val index = p.currentMediaItemIndex
                         val posInClip = p.currentPosition
                         
-                        val currentSegments = clipSegments
+                        val currentSegments = clipSegments.toList()
                         if (index >= 0 && index < currentSegments.size) {
                             val clip = currentSegments[index]
                             currentPosition = clip.cumulativeStartMs + posInClip
@@ -799,9 +812,7 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                         }
                     }
                     
-                    if (duration <= 0 && player?.duration ?: 0 > 0 && clipSegments.isNotEmpty()) {
-                        duration = player?.duration ?: 0
-                    }
+
                     
                     if (isPlaying) {
                         val now = System.currentTimeMillis()

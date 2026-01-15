@@ -309,10 +309,11 @@ class ReaderViewModel(
                         syncData = segmentsMap.toMap()
                         chapterOffsets = sortedOffsets
                         
-                        if (savedAudioMs != null && savedAudioMs > 0) {
+                         if (savedAudioMs != null && savedAudioMs > 0) {
                             getElementIdAtTime(savedAudioMs)?.let { result ->
                                 currentChapterIndex = result.first
                                 currentHighlightId = result.second
+                                currentAudioPos = savedAudioMs
                                 android.util.Log.d("ReaderSync", "Progress restored via priority Audio MS: ${result.first} / ${result.second} (${savedAudioMs}ms)")
                             }
                         } else if (currentHighlightId != null) {

@@ -52,12 +52,32 @@ class MainActivity : ComponentActivity() {
     private lateinit var readAloudAudioViewModel: com.pekempy.ReadAloudbooks.ui.player.ReadAloudAudioViewModel
     private lateinit var readerViewModel: ReaderViewModel
     private lateinit var libraryViewModel: LibraryViewModel
+    private var navigateToBookOnStart: Pair<String, String>? = null
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra("notification_click", false) == true) {
+            intent.removeExtra("notification_click")
+            runBlocking {
+                val lastBook = repository.lastActiveBook.first()
+                if (lastBook.first != null) {
+                    navigateToBookOnStart = lastBook.first!! to lastBook.second!!
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         
         repository = UserPreferencesRepository(applicationContext)
+        handleIntent(intent)
         val initialIsLoggedIn = runBlocking { repository.isLoggedIn.first() }
 
         sharedAudiobookViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
@@ -100,6 +120,17 @@ class MainActivity : ComponentActivity() {
                 amoled = settings.themeMode == 3
             ) {
                 val navController = rememberNavController()
+
+                LaunchedEffect(navController) {
+                    navigateToBookOnStart?.let { (bookId, type) ->
+                        if (type == "readaloud") {
+                            navController.navigate("reader/$bookId?isReadAloud=true&expandPlayer=true")
+                        } else {
+                            navController.navigate("player/$bookId")
+                        }
+                        navigateToBookOnStart = null
+                    }
+                }
 
                 var updateRelease by remember { mutableStateOf<com.pekempy.ReadAloudbooks.util.UpdateChecker.GitHubRelease?>(null) }
                 val context = androidx.compose.ui.platform.LocalContext.current
