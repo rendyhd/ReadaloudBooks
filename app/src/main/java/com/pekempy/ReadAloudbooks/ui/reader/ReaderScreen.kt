@@ -196,6 +196,7 @@ fun EpubWebView(
     onTap: () -> Unit
 ) {
     val theme = getReaderTheme(userSettings.readerTheme)
+    val isReadAloud = viewModel.isReadAloudMode
 
     
     key(userSettings.readerTheme, userSettings.readerFontFamily, userSettings.readerFontSize) {
@@ -291,7 +292,6 @@ fun EpubWebView(
                         @JavascriptInterface
                         fun onPrevChapter() {
                             viewModel.viewModelScope.launch {
-                                // Go to previous chapter and jump to the last page (100% scroll)
                                 viewModel.changeChapter(viewModel.currentChapterIndex - 1, scrollToEnd = true)
                             }
                         }
@@ -334,11 +334,11 @@ fun EpubWebView(
                 val chapterPath = viewModel.getCurrentChapterPath()
                 val baseUrl = "https://epub-internal/$chapterPath"
                 
-                val contentSignature = "$baseUrl-${userSettings.readerTheme}-${userSettings.readerFontSize}-${userSettings.readerFontFamily}"
+                val contentSignature = "$baseUrl-${userSettings.readerTheme}-${userSettings.readerFontSize}-${userSettings.readerFontFamily}-$isReadAloud"
                 val lastSignature = webView.tag as? String
                 
                 if (lastSignature != contentSignature) {
-                    val styledHtml = wrapHtml(html, userSettings, theme, viewModel.lastScrollPercent, accentHex, highlightId)
+                    val styledHtml = wrapHtml(html, userSettings, theme, viewModel.lastScrollPercent, accentHex, highlightId, isReadAloud)
                     android.util.Log.d("EpubWebView", "Reloading content. Signature changed: $contentSignature")
                     webView.loadDataWithBaseURL(baseUrl, styledHtml, "text/html", "UTF-8", null)
                     webView.scrollTo(0, 0)
@@ -396,7 +396,7 @@ fun EpubWebView(
     }
 }
 
-fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, initialScrollPercent: Float, accentColor: String, initialHighlightId: String? = null): String {
+fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, initialScrollPercent: Float, accentColor: String, initialHighlightId: String? = null, isReadAloud: Boolean = false): String {
     val fontFamily = when(userSettings.readerFontFamily) {
         "serif" -> "serif"
         "sans-serif" -> "sans-serif"
@@ -417,8 +417,8 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     --font-family: $fontFamily;
                     --padding-left: 16px;
                     --padding-right: 16px;
-                    --top-padding: 100px;
-                    --bottom-padding: 120px;
+                    --top-padding: 130px;
+                    --bottom-padding: ${if (isReadAloud) "140px" else "60px"};
                     --accent-color: $accentColor;
                 }
                 
@@ -440,28 +440,43 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     text-indent: 1.5em;
                 }
 
-                #content-container {
-                    box-sizing: border-box;
+                /* PAGINATION STYLES */
+                body {
+                    overflow: hidden !important; 
+                    width: 100vw;
+                    height: 100vh;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                #pagination-wrapper {
+                    display: flex;
+                    flex-direction: row;
+                    height: 100vh;
+                    width: max-content; 
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    will-change: transform;
+                    transform: translateX(0);
+                }
+                
+                #pagination-wrapper.animate {
+                    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+                }
+
+                .page {
                     width: 100vw;
                     height: 100vh;
                     padding: var(--top-padding) var(--padding-right) var(--bottom-padding) var(--padding-left);
-                    
-                    column-width: calc(100vw - var(--padding-left) - var(--padding-right));
-                    -webkit-column-width: calc(100vw - var(--padding-left) - var(--padding-right));
-                    
-                    column-gap: calc(var(--padding-left) + var(--padding-right));
-                    -webkit-column-gap: calc(var(--padding-left) + var(--padding-right));
-                    
-                    column-fill: auto;
-                    overflow: visible;
-                    overflow-wrap: break-word;
-                    word-wrap: break-word;
-                    
-                    will-change: transform;
-                    backface-visibility: hidden;
-                    -webkit-backface-visibility: hidden;
-                    
-                    transition: none;
+                    box-sizing: border-box;
+                    overflow: hidden;
+                    position: relative;
+                    flex-shrink: 0;
+                }
+                
+                #content-container {
+                    display: none;
                 }
 
                 #content-container.animate {
@@ -469,7 +484,11 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 }
 
                 /* Standard content styling with support for theme consistency */
-                #content-container, #content-container *:not(.highlight):not(.search-highlight) {
+                .page, .page *:not(.highlight):not(.search-highlight) {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    -webkit-hyphens: auto;
+                    hyphens: auto;
                     font-size: var(--font-size) !important;
                     font-family: var(--font-family) !important;
                     line-height: 1.6 !important;
@@ -483,7 +502,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                 /* Nuclear reset for unwanted lines (ruled paper, global underlining) */
                 /* Excludes images, highlights, and intentional headers/emphasis tags */
-                html, body, #content-container, #content-container *:not(img):not(.highlight):not(.search-highlight):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6):not(u):not(b):not(strong) {
+                html, body, .page, .page *:not(img):not(.highlight):not(.search-highlight):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6):not(u):not(b):not(strong) {
                     background-image: none !important;
                     text-decoration: none !important;
                     border-bottom: none !important;
@@ -506,6 +525,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                 img {
                     max-width: 100% !important;
+                    max-height: calc(100vh - var(--top-padding) - var(--bottom-padding) - 20px) !important;
                     height: auto !important;
                     display: block;
                     margin: 10px auto;
@@ -539,289 +559,396 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
             </style>
             <script>
                 let currentPage = 0;
+                let pageCount = 0;
                 let currentHighlightId = null;
-                let highlightInProgress = false;
-                let pendingHighlight = null;
-                
-                function highlightElement(id, retryCount = 0, animated = true) {
-                    if (!id) {
-                        if (window.Android) window.Android.onReaderReady();
-                        return;
-                    }
-                    
-                    if (id && id.match && id.match(/^c\d+$/) && currentHighlightId && currentHighlightId.match && (currentHighlightId.includes('sentence') || currentHighlightId.includes('word') || currentHighlightId.includes('text'))) {
-                        return;
-                    }
-                    
-                    if (highlightInProgress && pendingHighlight !== id && retryCount === 0) {
-                        pendingHighlight = id;
-                        return;
-                    }
-                    
-                    highlightInProgress = true;
-                    pendingHighlight = null;
-                    
-                    const el = document.getElementById(id);
-                    if (!el || (el.offsetWidth === 0 && el.offsetHeight === 0)) {
-                        if (retryCount < 30) {
-                            setTimeout(() => highlightElement(id, retryCount + 1, animated), 100);
-                        } else {
-                            highlightInProgress = false;
-                            if (window.Android) window.Android.onReaderReady();
-                            if (pendingHighlight && pendingHighlight !== id) {
-                                highlightElement(pendingHighlight, 0, animated);
-                            }
-                        }
-                        return;
-                    }
-                    
-                    if (currentHighlightId !== id) {
-                        const highlights = document.querySelectorAll('.highlight');
-                        highlights.forEach(h => h.classList.remove('highlight'));
-                        el.classList.add('highlight');
-                        currentHighlightId = id;
-                    }
-                    
-                    const container = document.getElementById('content-container');
-                    const step = getStep();
-                    if (step > 0 && container) {
-                        const rect = el.getBoundingClientRect();
-                        const containerRect = container.getBoundingClientRect();
-                        
-                        // Use a more stable left calculation
-                        const absoluteLeft = rect.left - containerRect.left;
-                        const elementCenter = absoluteLeft + (el.offsetWidth / 2);
-                        
-                        const targetPage = Math.floor((elementCenter + 1) / step);
-                        const totalWidth = container.scrollWidth;
-                        const maxPages = Math.max(1, Math.ceil(totalWidth / step));
-                        const clampedPage = Math.max(0, Math.min(targetPage, maxPages - 1));
-                        
-                        console.log("Highlight: id=" + id + ", absLeft=" + absoluteLeft + ", step=" + step + ", page=" + clampedPage + "/" + maxPages);
-                        
-                        if (clampedPage !== currentPage) {
-                            currentPage = clampedPage;
-                            updateTransform(animated);
-                        }
-                    }
-                    
-                    highlightInProgress = false;
-                    
-                    if (pendingHighlight && pendingHighlight !== id) {
-                        const nextHighlight = pendingHighlight;
-                        pendingHighlight = null;
-                        highlightElement(nextHighlight, 0, animated);
-                    } else {
-                        if (window.Android) window.Android.onReaderReady();
-                    }
-                }
-                
-                function elementLeftAbsolute(el, container) {
-                    const rect = el.getBoundingClientRect();
-                    const containerRect = container.getBoundingClientRect();
-                    return rect.left - containerRect.left;
-                }
-                
-                function getStep() {
-                    const width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-                    return Math.floor(width);
-                }
+                let elementPageMap = {};
 
-                function updateTransform(animate = true) {
-                    const container = document.getElementById('content-container');
-                    if (!container) return;
-                    const step = getStep();
-                    const offset = Math.round(currentPage * step);
+                function getPageWidth() { return window.innerWidth; }
+
+                function paginate() {
+                    console.log("Starting pagination...");
+                    const wrapper = document.createElement('div');
+                    wrapper.id = 'pagination-wrapper';
                     
-                    if (animate) {
-                        container.classList.add('animate');
+                    const contentContainer = document.getElementById('content-container');
+                    let sourceNodes = [];
+                    if (contentContainer) {
+                         sourceNodes = Array.from(contentContainer.childNodes);
+                         contentContainer.parentNode.removeChild(contentContainer);
                     } else {
-                        container.classList.remove('animate');
+                         sourceNodes = Array.from(document.body.childNodes).filter(child => 
+                             child.tagName !== 'SCRIPT' && 
+                             child.tagName !== 'STYLE' && 
+                             child.id !== 'pagination-wrapper'
+                         );
                     }
-                    
-                    container.style.transform = 'translateX(-' + offset + 'px)';
-                    container.offsetHeight; 
-                    
-                    if (window.Android) {
-                        const totalWidth = container.scrollWidth;
-                        if (totalWidth <= 0 || step <= 0) return;
+
+                    const fragment = document.createDocumentFragment();
+                    sourceNodes.forEach(node => fragment.appendChild(node));
+
+                    document.body.appendChild(wrapper);
+
+                    let currentPageDiv = createPage();
+                    wrapper.appendChild(currentPageDiv);
+                    pageCount = 1;
+
+                    const pageLimit = currentPageDiv.clientHeight || window.innerHeight;
+                    console.log("Page limit: " + pageLimit);
+
+                    function createPage() {
+                        const p = document.createElement('div');
+                        p.className = 'page';
+                        return p;
+                    }
+
+                    function startNewPage() {
+                        currentPageDiv = createPage();
+                        wrapper.appendChild(currentPageDiv);
+                        pageCount++;
+                    }
+
+                    function splitTextNode(textNode, container) {
+                        container.appendChild(textNode);
+                        const text = textNode.textContent;
+                        let min = 0;
+                        let max = text.length;
+                        let safe = 0;
                         
-                        const maxPages = Math.max(1, Math.ceil(totalWidth / step));
-                        const percent = maxPages > 1 ? (currentPage / (maxPages - 1)) : 0;
-                        
-                        let bestId = "";
-                        const elements = container.querySelectorAll('p[id], div[id], h1[id], h2[id], h3[id], section[id], span[id]');
-                        for (let i = 0; i < elements.length; i++) {
-                            const el = elements[i];
-                            if (el.classList.contains('highlight')) continue;
-                            const left = elementLeftAbsolute(el, container);
-                            if (left <= offset + 50) {
-                                bestId = el.id;
-                            } else if (left > offset + step) {
-                                break;
+                        while (min <= max) {
+                            const mid = Math.floor((min + max) / 2);
+                            const chunk = text.substring(0, mid);
+                            textNode.textContent = chunk;
+                            if (currentPageDiv.scrollHeight <= pageLimit) {
+                                safe = mid;
+                                min = mid + 1;
+                            } else {
+                                max = mid - 1;
                             }
                         }
                         
-                        window.Android.onScrollWithId(percent, bestId);
+                        // Respect word boundaries
+                        if (safe < text.length) {
+                             const lastSpace = text.lastIndexOf(' ', safe);
+                             if (lastSpace > 0) {
+                                 safe = lastSpace + 1; // Include the space on the first page
+                             }
+                        }
+                        
+                        const firstPart = text.substring(0, safe);
+                        const secondPart = text.substring(safe);
+                        textNode.textContent = firstPart;
+                        if (!secondPart) return null;
+                        return document.createTextNode(secondPart);
+                    }
+                    
+                    function splitElementAcrossPages(element, parentContainer) {
+                        const clone = element.cloneNode(false);
+                        parentContainer.appendChild(clone);
+                        const kids = Array.from(element.childNodes);
+                        let subContainer = clone;
+                        
+                        for (let k = 0; k < kids.length; k++) {
+                            const kid = kids[k];
+                            // Try append
+                            subContainer.appendChild(kid);
+                            
+                            if (currentPageDiv.scrollHeight > pageLimit) {
+                                subContainer.removeChild(kid);
+                                
+                                if (kid.nodeType === Node.TEXT_NODE) {
+                                    const rem = splitTextNode(kid, subContainer);
+                                    if (rem) {
+                                        startNewPage();
+                                        
+                                        let newParent;
+                                        if (parentContainer.classList && parentContainer.classList.contains('page')) {
+                                            newParent = currentPageDiv;
+                                        } else {
+                                            const parentClone = parentContainer.cloneNode(false);
+                                            if(parentClone.id) {
+                                                parentClone.setAttribute('data-continuation-of', parentClone.id);
+                                                parentClone.removeAttribute('id');
+                                            }
+                                            currentPageDiv.appendChild(parentClone);
+                                            newParent = parentClone;
+                                        }
+                                        
+                                        const elClone = element.cloneNode(false);
+                                        if(elClone.id) {
+                                            elClone.setAttribute('data-continuation-of', elClone.id);
+                                            elClone.removeAttribute('id');
+                                        }
+                                        newParent.appendChild(elClone);
+                                        
+                                        subContainer = elClone;
+                                        parentContainer = newParent;
+                                        
+                                        subContainer.appendChild(rem);
+                                    }
+                                } else if (kid.tagName === 'IMG') {
+                                    startNewPage();
+                                    
+                                    let newParent;
+                                    if (parentContainer.classList && parentContainer.classList.contains('page')) {
+                                        newParent = currentPageDiv;
+                                    } else {
+                                        const parentClone = parentContainer.cloneNode(false);
+                                        if(parentClone.id) {
+                                            parentClone.setAttribute('data-continuation-of', parentClone.id);
+                                            parentClone.removeAttribute('id');
+                                        }
+                                        currentPageDiv.appendChild(parentClone);
+                                        newParent = parentClone;
+                                    }
+                                    
+                                    const elClone = element.cloneNode(false);
+                                    if(elClone.id) {
+                                        elClone.setAttribute('data-continuation-of', elClone.id);
+                                        elClone.removeAttribute('id');
+                                    }
+                                    newParent.appendChild(elClone);
+                                    
+                                    subContainer = elClone;
+                                    parentContainer = newParent;
+                                    
+                                    subContainer.appendChild(kid);
+                                } else {
+                                    subContainer = splitElementAcrossPages(kid, subContainer);
+                                }
+                            }
+                        }
+                        return subContainer;
+                    }
+
+                    while(fragment.childNodes.length > 0) {
+                         const node = fragment.childNodes[0];
+                         fragment.removeChild(node);
+                         currentPageDiv.appendChild(node);
+                         
+                         if (currentPageDiv.scrollHeight > pageLimit) {
+                             currentPageDiv.removeChild(node);
+                             if (node.nodeType === Node.TEXT_NODE) {
+                                 const rem = splitTextNode(node, currentPageDiv);
+                                 if (rem) {
+                                     startNewPage();
+                                     currentPageDiv.appendChild(rem);
+                                 }
+                             } else if (node.nodeType === Node.ELEMENT_NODE) {
+                                 if (node.tagName === 'IMG') {
+                                     startNewPage();
+                                     currentPageDiv.appendChild(node);
+                                 } else {
+                                     splitElementAcrossPages(node, currentPageDiv);
+                                 }
+                             }
+                         }
+                    }
+                    console.log("Pagination complete. Pages: " + pageCount);
+                    
+                    const allElements = wrapper.querySelectorAll('[id]');
+                    allElements.forEach(el => {
+                        const page = el.closest('.page');
+                        if (page) {
+                            const index = Array.from(wrapper.children).indexOf(page);
+                            elementPageMap[el.id] = index;
+                        }
+                    });
+                }
+                
+                function gotoPage(index, animate = true) {
+                    if (index < 0) index = 0;
+                    if (index >= pageCount) index = pageCount - 1;
+                    currentPage = index;
+                    const wrapper = document.getElementById('pagination-wrapper');
+                    if (wrapper) {
+                        wrapper.style.transition = animate ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none';
+                        wrapper.style.transform = 'translateX(-' + (index * 100) + 'vw)';
+                        if (window.Android) {
+                             const percent = pageCount > 1 ? index / (pageCount - 1) : 0;
+                             let bestId = null;
+                             const page = wrapper.children[index];
+                             if (page) {
+                                 const firstId = page.querySelector('[id]');
+                                 if (firstId) bestId = firstId.id;
+                             }
+                             window.Android.onScrollWithId(percent, bestId);
+                        }
                     }
                 }
-
+                
                 function scrollToPercent(percent) {
-                    const container = document.getElementById('content-container');
-                    if (!container) return;
-                    
-                    function attemptScroll() {
-                        const totalWidth = container.scrollWidth;
-                        const step = getStep();
-                        if (totalWidth <= 0 || step <= 0) {
-                            setTimeout(attemptScroll, 100);
-                            return;
-                        }
-                        const maxPages = Math.max(1, Math.ceil(totalWidth / step));
-                        currentPage = Math.round(percent * (maxPages - 1));
-                        updateTransform(false);
-                    }
-                    attemptScroll();
+                    const target = Math.round(percent * (pageCount - 1));
+                    gotoPage(target, false);
                 }
-
+                
                 function pageLeft() {
                     if (currentPage <= 0) {
                         if (window.Android) window.Android.onPrevChapter();
                         return;
                     }
-                    currentPage--;
-                    updateTransform(true);
-                }
-
-                function findAndHighlight(text, retryCount = 0, matchIndex = 0) {
-                    console.log("findAndHighlight called for: " + text + ", index: " + matchIndex + ", retry: " + retryCount);
-                    if (!text) return;
-                    
-                    if (retryCount === 0) {
-                         const oldHighlights = document.querySelectorAll('.search-highlight');
-                         oldHighlights.forEach(el => {
-                             const parent = el.parentNode;
-                             while(el.firstChild) parent.insertBefore(el.firstChild, el);
-                             parent.removeChild(el);
-                         });
-                    }
-
-                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                    let node;
-                    let currentMatch = 0;
-                    let foundRange = null;
-
-                    text = text.toLowerCase();
-                    
-                    while (node = walker.nextNode()) {
-                        const content = node.textContent.toLowerCase();
-                        let searchIndex = 0;
-                        
-                        while (true) {
-                            const foundIndex = content.indexOf(text, searchIndex);
-                            if (foundIndex === -1) break;
-                            
-                            if (currentMatch === matchIndex) {
-                                foundRange = document.createRange();
-                                foundRange.setStart(node, foundIndex);
-                                foundRange.setEnd(node, foundIndex + text.length);
-                                break;
-                            }
-                            
-                            currentMatch++;
-                            searchIndex = foundIndex + 1;
-                        }
-                        if (foundRange) break;
-                    }
-
-                    if (!foundRange) {
-                        console.log("Text not found via TreeWalker: " + text + ". Retrying: " + retryCount);
-                        if (retryCount < 20) {
-                             setTimeout(() => findAndHighlight(text, retryCount + 1, matchIndex), 100);
-                        }
-                        return;
-                    }
-
-                    console.log("TreeWalker found range!");
-                    
-                    try {
-                        const span = document.createElement('span');
-                        span.className = 'search-highlight';
-                        foundRange.surroundContents(span);
-                        
-                        const rect = span.getBoundingClientRect();
-                        const container = document.getElementById('content-container');
-                        const containerRect = container.getBoundingClientRect();
-                        const step = getStep();
-                        
-                        console.log("Calculated Step: " + step);
-
-                        if (step > 0) {
-                             const absoluteLeft = Math.round(rect.left - containerRect.left);
-                             const targetPage = Math.floor((absoluteLeft + 1) / step);
-                             
-                             console.log("Rect Left: " + rect.left + ", Container Left: " + containerRect.left + ", AbsLeft: " + absoluteLeft + ", Step: " + step + ", TargetPage: " + targetPage);
-
-                             if (targetPage !== currentPage) {
-                                 console.log("Search: Jumping to page " + targetPage);
-                                 currentPage = targetPage;
-                                 updateTransform(false);
-                             }
-                        } else {
-                            console.warn("Step is 0! Retrying...");
-                             if (retryCount < 20) {
-                                 const parent = span.parentNode;
-                                 while(span.firstChild) parent.insertBefore(span.firstChild, span);
-                                 parent.removeChild(span);
-                                 
-                                 setTimeout(() => findAndHighlight(text, retryCount + 1, matchIndex), 100);
-                                 return;
-                            }
-                        }
-
-                    } catch (e) {
-                         console.error("Failed to wrap highlighting", e);
-                         const rect = foundRange.getBoundingClientRect();
-                         const container = document.getElementById('content-container');
-                         const containerRect = container.getBoundingClientRect();
-                         const step = getStep();
-                         
-                         if (step > 0) {
-                              const absoluteLeft = Math.round(rect.left - containerRect.left);
-                              const targetPage = Math.floor((absoluteLeft + 1) / step);
-                              if (targetPage !== currentPage) {
-                                  currentPage = targetPage;
-                                  updateTransform(false);
-                              }
-                         }
-                    }
+                    gotoPage(currentPage - 1);
                 }
                 
                 function pageRight() {
-                    const container = document.getElementById('content-container');
-                    const totalWidth = container.scrollWidth;
-                    const maxPages = Math.max(1, Math.ceil(totalWidth / getStep()));
+                    if (currentPage >= pageCount - 1) {
+                         if (window.Android) window.Android.onNextChapter();
+                         return;
+                    }
+                    gotoPage(currentPage + 1);
+                }
+                
+                function highlightElement(id, retry = 0, animated = true) {
+                    if (!id) return;
                     
-                    if (currentPage >= maxPages - 1) { 
-                        if (window.Android) window.Android.onNextChapter();
+                    // Find all parts (original ID + continuations)
+                    const parts = Array.from(document.querySelectorAll(`[id="${'$'}{id}"], [data-continuation-of="${'$'}{id}"]`));
+                    
+                    if (parts.length === 0) {
+                        if (retry < 5) setTimeout(() => highlightElement(id, retry+1, animated), 200);
                         return;
                     }
-                    currentPage++;
-                    updateTransform(true);
+
+                    // Highlight visual style
+                    if (currentHighlightId !== id) {
+                         document.querySelectorAll('.highlight').forEach(o => o.classList.remove('highlight'));
+                         parts.forEach(el => el.classList.add('highlight'));
+                         currentHighlightId = id;
+                    } else {
+                         // Ensure new parts are highlighted if something changed
+                         parts.forEach(el => el.classList.add('highlight'));
+                    }
+
+                    const wrapper = document.getElementById('pagination-wrapper');
+                    
+                    // HEURISTIC: Short Orphan Check
+                    // If the highlight is short and at the end of the page, checking next content.
+                    let totalLen = 0;
+                    parts.forEach(p => totalLen += p.textContent.length);
+                    
+                    if (totalLen < 40) {
+                         const lastPart = parts[parts.length - 1];
+                         const page = lastPart.closest('.page');
+                         
+                         if (page && wrapper) {
+                             const pIdx = Array.from(wrapper.children).indexOf(page);
+                             
+                             // Traverse forward to find next content node
+                             let scan = lastPart;
+                             let foundNext = null;
+                             while(scan && scan !== wrapper) {
+                                 if (scan.nextSibling) {
+                                     foundNext = scan.nextSibling;
+                                     break;
+                                 }
+                                 scan = scan.parentNode;
+                             }
+                             
+                             if (foundNext) {
+                                 const nextPage = foundNext.closest('.page');
+                                 if (nextPage) {
+                                      const nextIdx = Array.from(wrapper.children).indexOf(nextPage);
+                                      if (nextIdx > pIdx) {
+                                          console.log("Short highlight detected at page boundary. Eagerly advancing to Page " + nextIdx);
+                                          if (currentPage !== nextIdx) gotoPage(nextIdx, animated);
+                                          return;
+                                      }
+                                 }
+                             }
+                         }
+                    }
+
+                    // STANDARD EAGER STRATEGY: Scroll to the LAST page containing any part of the highlight.
+                    const lastPart = parts[parts.length - 1];
+                    const page = lastPart.closest('.page');
+                    
+                    if (page && wrapper) {
+                        const pageIndex = Array.from(wrapper.children).indexOf(page);
+                        
+                        if (pageIndex >= 0 && currentPage !== pageIndex) {
+                             gotoPage(pageIndex, animated);
+                        }
+                    }
+                }
+
+                window.onload = function() {
+                    paginate();
+                    const highlightId = ${if (initialHighlightId != null) "'$initialHighlightId'" else "null"};
+                    const initialPercent = $initialScrollPercent;
+                    if (highlightId) {
+                        highlightElement(highlightId);
+                    } else if (initialPercent > 0) {
+                        scrollToPercent(initialPercent);
+                    }
+                    if (window.Android) window.Android.onReaderReady();
+                };
+
+                function findAndHighlight(text, retryCount = 0, matchIndex = 0) {
+                     if (!text) return;
+                     if (retryCount === 0) {
+                          document.querySelectorAll('.search-highlight').forEach(el => {
+                              const parent = el.parentNode;
+                              while(el.firstChild) parent.insertBefore(el.firstChild, el);
+                              parent.removeChild(el);
+                          });
+                     }
+                     
+                     const walker = document.createTreeWalker(document.getElementById('pagination-wrapper') || document.body, NodeFilter.SHOW_TEXT, null, false);
+                     let node;
+                     let currentMatch = 0;
+                     let foundRange = null;
+                     text = text.toLowerCase();
+                     
+                     while(node = walker.nextNode()) {
+                         const content = node.textContent.toLowerCase();
+                         let searchIndex = 0;
+                         while(true) {
+                             const foundIndex = content.indexOf(text, searchIndex);
+                             if (foundIndex === -1) break;
+                             if (currentMatch === matchIndex) {
+                                 foundRange = document.createRange();
+                                 foundRange.setStart(node, foundIndex);
+                                 foundRange.setEnd(node, foundIndex + text.length);
+                                 break;
+                             }
+                             currentMatch++;
+                             searchIndex = foundIndex + 1;
+                         }
+                         if (foundRange) break;
+                     }
+                     
+                     if (foundRange) {
+                         try {
+                             const span = document.createElement('span');
+                             span.className = 'search-highlight';
+                             foundRange.surroundContents(span);
+                             
+                             const page = span.closest('.page');
+                             if (page) {
+                                 const wrapper = document.getElementById('pagination-wrapper');
+                                 const index = Array.from(wrapper.children).indexOf(page);
+                                 if (index !== -1 && index !== currentPage) {
+                                     gotoPage(index, false);
+                                 }
+                             }
+                         } catch (e) {
+                             console.error("Highlight error", e);
+                         }
+                     } else if (retryCount < 5) {
+                         setTimeout(() => findAndHighlight(text, retryCount + 1, matchIndex), 100);
+                     }
                 }
 
                 let touchStartX = 0;
                 let touchStartTime = 0;
-
+                
                 document.addEventListener('touchstart', function(e) {
                     touchStartX = e.changedTouches[0].screenX;
                     touchStartTime = Date.now();
                 }, false);
-
+                
                 document.addEventListener('touchend', function(e) {
                     const deltaX = e.changedTouches[0].screenX - touchStartX;
                     const deltaTime = Date.now() - touchStartTime;
-                    
                     if (Math.abs(deltaX) > 40 && deltaTime < 300) {
                         if (deltaX > 0) pageLeft();
                         else pageRight();
@@ -836,57 +963,13 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     event.preventDefault();
                     event.stopPropagation();
                     let target = event.target;
-                    while (target && (!target.id || target.id === 'content-container')) {
+                    while (target && !target.id) {
                         target = target.parentElement;
                     }
                     if (target && target.id && window.Android) {
                         window.Android.onElementLongPress(target.id);
                         return false;
                     }
-                };
-
-                window.onload = function() {
-                    const highlightId = ${if (initialHighlightId != null) "'$initialHighlightId'" else "null"};
-                    const initialPercent = $initialScrollPercent;
-                    
-                    let lastScrollWidth = -1;
-                    let stableCount = 0;
-
-                    function stabilizeAndStart() {
-                        const container = document.getElementById('content-container');
-                        if (!container) {
-                            setTimeout(stabilizeAndStart, 100);
-                            return;
-                        }
-                        
-                        const currentWidth = container.scrollWidth;
-                        if (currentWidth <= 100) { 
-                            setTimeout(stabilizeAndStart, 150);
-                            return;
-                        }
-
-                        if (currentWidth === lastScrollWidth) {
-                            stableCount++;
-                        } else {
-                            stableCount = 0;
-                            lastScrollWidth = currentWidth;
-                        }
-
-                        if (stableCount < 2) {
-                            setTimeout(stabilizeAndStart, 150);
-                            return;
-                        }
-                        
-                        console.log("Layout stable. Width: " + currentWidth + ". Start pos: " + initialPercent + ", highlight: " + highlightId);
-                        
-                        if (highlightId) {
-                            highlightElement(highlightId, 0, false);
-                        } else {
-                            scrollToPercent(initialPercent);
-                        }
-                    }
-                    
-                    stabilizeAndStart();
                 };
             </script>
         </head>
