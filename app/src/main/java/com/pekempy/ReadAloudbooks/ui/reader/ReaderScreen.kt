@@ -373,14 +373,16 @@ fun EpubWebView(
                 }
                 
                 if (activeSearch != null) {
-                    val lastSearch = webView.getTag(com.pekempy.ReadAloudbooks.R.id.search_tag) as? String
-                    if (lastSearch != activeSearch) {
+                    val searchSignature = "$activeSearch|$activeSearchMatchIndex"
+                    val lastSignature = webView.getTag(com.pekempy.ReadAloudbooks.R.id.search_tag) as? String
+                    
+                    if (lastSignature != searchSignature) {
                         android.util.Log.d("EpubWebView", "Update: scheduling findAndHighlight('$activeSearch', 0, $activeSearchMatchIndex)")
                         webView.postDelayed({
                             android.util.Log.d("EpubWebView", "Update: executing findAndHighlight")
                             webView.evaluateJavascript("if (typeof findAndHighlight === 'function') findAndHighlight('$activeSearch', 0, $activeSearchMatchIndex)", null)
                         }, 300)
-                        webView.setTag(com.pekempy.ReadAloudbooks.R.id.search_tag, activeSearch)
+                        webView.setTag(com.pekempy.ReadAloudbooks.R.id.search_tag, searchSignature)
                     }
                 }
                 

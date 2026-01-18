@@ -1,5 +1,6 @@
 package com.pekempy.ReadAloudbooks.data.api
 
+import retrofit2.Response
 import retrofit2.http.*
 
 interface StorytellerApi {
@@ -40,7 +41,7 @@ interface StorytellerApi {
     @DELETE("api/v2/books/{uuid}/process")
     suspend fun cancelProcessing(
         @Path("uuid") uuid: String
-    )
+    ): Response<Unit>
 
     @Multipart
     @PUT("api/v2/books/{uuid}")

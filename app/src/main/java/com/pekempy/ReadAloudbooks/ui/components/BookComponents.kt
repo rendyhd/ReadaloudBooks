@@ -191,17 +191,22 @@ fun BookItem(
 }
 
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CategoryListItem(
     name: String,
     covers: List<String>,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null
 ) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -382,5 +387,29 @@ fun BookActionMenu(
                 }
             )
         }
+    }
+}
+
+@Composable
+fun SeriesActionMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    seriesName: String?,
+    onDownloadSeries: (String) -> Unit
+) {
+    if (seriesName == null) return
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest
+    ) {
+        DropdownMenuItem(
+            text = { Text("Download All") },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_download), contentDescription = null) },
+            onClick = {
+                onDownloadSeries(seriesName)
+                onDismissRequest()
+            }
+        )
     }
 }

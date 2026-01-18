@@ -169,6 +169,29 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
         }
     }
 
+    fun stopProcessing(bookId: String) {
+        viewModelScope.launch {
+            try {
+                AppContainer.apiClientManager.getApi().processBook(bookId, restart = true)
+            } catch (e: Exception) {
+                android.util.Log.w("LibraryViewModel", "Restart before stop failed (proceeding to stop): ${e.message}")
+            }
+
+            kotlinx.coroutines.delay(250)
+
+            try {
+                val response = AppContainer.apiClientManager.getApi().cancelProcessing(bookId)
+                if (response.isSuccessful) {
+                    loadBooks()
+                } else {
+                    android.util.Log.e("LibraryViewModel", "Failed to stop processing for $bookId: ${response.code()} ${response.message()}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryViewModel", "Failed to stop processing for $bookId: ${e.message}")
+            }
+        }
+    }
+
     fun createReadAloud(bookId: String) {
         val previousBooks = allBooks
         allBooks = allBooks.map { 
@@ -409,6 +432,15 @@ class LibraryViewModel(private val repository: UserPreferencesRepository) : View
         downloadingBooks[book.id] = DownloadStatus(0f, "Queued")
         
         com.pekempy.ReadAloudbooks.data.DownloadManager.downloadAll(book, AppContainer.context.filesDir)
+    }
+
+    fun downloadSeries(seriesName: String) {
+        val seriesBooks = allBooks.filter { it.series == seriesName }
+        seriesBooks.forEach { book ->
+            if (!book.isDownloaded) {
+                downloadBook(book)
+            }
+        }
     }
 
     fun setViewMode(mode: ViewMode) {

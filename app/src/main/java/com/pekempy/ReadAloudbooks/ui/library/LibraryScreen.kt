@@ -65,7 +65,9 @@ fun LibraryScreen(
     var isSearchMode by remember { mutableStateOf(false) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     var selectedBookForMenu by remember { mutableStateOf<Book?>(null) }
+    var selectedSeriesForMenu by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
+    var showSeriesMenu by remember { mutableStateOf(false) }
     var bookToDelete by remember { mutableStateOf<Book?>(null) }
 
     LaunchedEffect(isSearchMode) {
@@ -267,6 +269,8 @@ fun LibraryScreen(
             onEdit = onEditBook
         )
 
+
+
         if (bookToDelete != null) {
             AlertDialog(
                 onDismissRequest = { bookToDelete = null },
@@ -289,6 +293,8 @@ fun LibraryScreen(
                 }
             )
         }
+
+
 
         if (viewModel.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -548,11 +554,24 @@ fun LibraryScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(series) { s ->
-                                    CategoryListItem(
-                                        name = s,
-                                        covers = viewModel.getCoversForSeries(s),
-                                        onClick = { viewModel.selectFilter(s) }
-                                    )
+                                    Box {
+                                        CategoryListItem(
+                                            name = s,
+                                            covers = viewModel.getCoversForSeries(s),
+                                            onClick = { viewModel.selectFilter(s) },
+                                            onLongClick = { 
+                                                selectedSeriesForMenu = s
+                                                showSeriesMenu = true
+                                            }
+                                        )
+
+                                        com.pekempy.ReadAloudbooks.ui.components.SeriesActionMenu(
+                                            expanded = showSeriesMenu && selectedSeriesForMenu == s,
+                                            onDismissRequest = { showSeriesMenu = false },
+                                            seriesName = s,
+                                            onDownloadSeries = { viewModel.downloadSeries(it) }
+                                        )
+                                    }
                                 }
                             }
                         } else if (targetMode == LibraryViewModel.ViewMode.Downloads) {
@@ -683,24 +702,42 @@ fun LibraryScreen(
                                                         color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                                     )
                                                     
-                                                    if (isError) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        if (queuePos != null && queuePos > 0 && !isError) {
+                                                            Text(
+                                                                text = "Queue: #$queuePos",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.secondary
+                                                            )
+                                                            Spacer(Modifier.width(8.dp))
+                                                        }
+
                                                         IconButton(
-                                                            onClick = { viewModel.retryProcessing(book.id) },
+                                                            onClick = { viewModel.stopProcessing(book.id) },
                                                             modifier = Modifier.size(24.dp)
                                                         ) {
                                                             Icon(
-                                                                painterResource(R.drawable.ic_history),
-                                                                contentDescription = "Retry",
+                                                                painterResource(R.drawable.ic_close),
+                                                                contentDescription = "Stop",
                                                                 modifier = Modifier.size(16.dp),
-                                                                tint = MaterialTheme.colorScheme.primary
+                                                                tint = MaterialTheme.colorScheme.error
                                                             )
                                                         }
-                                                    } else if (queuePos != null && queuePos > 0) {
-                                                        Text(
-                                                            text = "Queue: #$queuePos",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.secondary
-                                                        )
+
+                                                        if (isError) {
+                                                            Spacer(Modifier.width(8.dp))
+                                                            IconButton(
+                                                                onClick = { viewModel.retryProcessing(book.id) },
+                                                                modifier = Modifier.size(24.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    painterResource(R.drawable.ic_history),
+                                                                    contentDescription = "Retry",
+                                                                    modifier = Modifier.size(16.dp),
+                                                                    tint = MaterialTheme.colorScheme.primary
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
                                                 
