@@ -340,9 +340,10 @@ fun ReaderScreen(
         }
 
         // Handle pending highlight creation
-        LaunchedEffect(viewModel.pendingHighlight) {
-            android.util.Log.d("ReaderScreen", "LaunchedEffect triggered: pendingHighlight=${viewModel.pendingHighlight != null}, showLongPressMenu=$showLongPressMenu")
-            if (viewModel.pendingHighlight != null && !showLongPressMenu) {
+        LaunchedEffect(viewModel.pendingHighlight, showLongPressMenu) {
+            val pending = viewModel.pendingHighlight
+            android.util.Log.d("ReaderScreen", "LaunchedEffect triggered: pendingHighlight=$pending, showLongPressMenu=$showLongPressMenu")
+            if (pending != null && !showLongPressMenu) {
                 android.util.Log.d("ReaderScreen", "Showing color picker for drag-select highlight")
                 showColorPicker = true
             }
@@ -350,7 +351,10 @@ fun ReaderScreen(
 
         // Handle long press menu
         LaunchedEffect(viewModel.longPressedElementId) {
-            if (viewModel.longPressedElementId != null) {
+            val elementId = viewModel.longPressedElementId
+            android.util.Log.d("ReaderScreen", "Long-press LaunchedEffect triggered: elementId=$elementId")
+            if (elementId != null) {
+                android.util.Log.d("ReaderScreen", "Showing long-press menu")
                 showLongPressMenu = true
             }
         }
@@ -510,17 +514,16 @@ fun EpubWebView(
                         @JavascriptInterface
                         fun onElementLongPress(id: String, selectedText: String) {
                             android.util.Log.d("ReaderScreen", "onElementLongPress called: id=$id, hasText=${selectedText.isNotBlank()}")
-                            viewModel.viewModelScope.launch {
-                                viewModel.longPressedElementId = id
-                                if (selectedText.isNotBlank()) {
-                                    android.util.Log.d("ReaderScreen", "Long-press with selection, setting pendingHighlight")
-                                    viewModel.pendingHighlight = ReaderViewModel.PendingHighlight(
-                                        chapterIndex = viewModel.currentChapterIndex,
-                                        elementId = id,
-                                        text = selectedText.trim()
-                                    )
-                                }
+                            viewModel.longPressedElementId = id
+                            if (selectedText.isNotBlank()) {
+                                android.util.Log.d("ReaderScreen", "Long-press with selection, setting pendingHighlight")
+                                viewModel.pendingHighlight = ReaderViewModel.PendingHighlight(
+                                    chapterIndex = viewModel.currentChapterIndex,
+                                    elementId = id,
+                                    text = selectedText.trim()
+                                )
                             }
+                            android.util.Log.d("ReaderScreen", "longPressedElementId set to: $id, pendingHighlight=${viewModel.pendingHighlight}")
                         }
 
                         @JavascriptInterface
@@ -532,17 +535,14 @@ fun EpubWebView(
                         @JavascriptInterface
                         fun onTextSelected(elementId: String, selectedText: String) {
                             android.util.Log.d("ReaderScreen", "onTextSelected called: elementId=$elementId, text=${selectedText.take(30)}...")
-                            viewModel.viewModelScope.launch {
-                                if (selectedText.isNotBlank()) {
-                                    android.util.Log.d("ReaderScreen", "Setting pendingHighlight")
-                                    viewModel.pendingHighlight = ReaderViewModel.PendingHighlight(
-                                        chapterIndex = viewModel.currentChapterIndex,
-                                        elementId = elementId,
-                                        text = selectedText.trim()
-                                    )
-                                    // Force immediate color picker show
-                                    android.util.Log.d("ReaderScreen", "pendingHighlight set, longPressedElementId=${viewModel.longPressedElementId}")
-                                }
+                            if (selectedText.isNotBlank()) {
+                                android.util.Log.d("ReaderScreen", "Setting pendingHighlight")
+                                viewModel.pendingHighlight = ReaderViewModel.PendingHighlight(
+                                    chapterIndex = viewModel.currentChapterIndex,
+                                    elementId = elementId,
+                                    text = selectedText.trim()
+                                )
+                                android.util.Log.d("ReaderScreen", "pendingHighlight set to: ${viewModel.pendingHighlight}, longPressedElementId=${viewModel.longPressedElementId}")
                             }
                         }
                     }, "Android")
@@ -1254,10 +1254,16 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 let isLongPressHandled = false;
 
                 document.addEventListener('selectionchange', function() {
+                    const selection = window.getSelection();
+                    console.log("Selection changed, text length:", selection ? selection.toString().trim().length : 0);
+
                     clearTimeout(selectionTimeout);
                     selectionTimeout = setTimeout(function() {
+                        console.log("Selection timeout triggered, isLongPressHandled:", isLongPressHandled);
+
                         // Skip if long-press already handled this
                         if (isLongPressHandled) {
+                            console.log("Skipping - long press already handled");
                             isLongPressHandled = false;
                             return;
                         }
@@ -1275,18 +1281,25 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                                 element = element.parentElement;
                             }
 
+                            console.log("Found element ID:", element ? element.id : "none");
+
                             if (element && element.id && window.Android) {
-                                console.log("Text selected via drag: " + selectedText.substring(0, 30) + "...");
+                                console.log("Calling Android.onTextSelected with text: " + selectedText.substring(0, 30) + "...");
                                 window.Android.onTextSelected(element.id, selectedText);
+                            } else {
+                                console.log("NOT calling Android - element:", !!element, "element.id:", element ? element.id : "N/A", "Android:", !!window.Android);
                             }
 
                             // DO NOT clear selection - let user see what they selected
                             // The selection will be cleared manually after highlight creation
+                        } else {
+                            console.log("No selection or empty selection");
                         }
                     }, 800);  // Increased delay to ensure long-press is detected first
                 });
 
                 window.oncontextmenu = function(event) {
+                    console.log("Context menu event triggered (long-press)");
                     event.preventDefault();
                     event.stopPropagation();
 
@@ -1297,12 +1310,17 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     while (target && !target.id) {
                         target = target.parentElement;
                     }
+
+                    console.log("Long-press target ID:", target ? target.id : "none");
+
                     if (target && target.id && window.Android) {
                         const selection = window.getSelection();
                         const selectedText = selection && selection.toString().trim();
-                        console.log("Long-press detected, selectedText: " + (selectedText || "none"));
+                        console.log("Long-press calling Android with ID:", target.id, "text:", selectedText ? selectedText.substring(0, 30) : "none");
                         window.Android.onElementLongPress(target.id, selectedText || "");
                         return false;
+                    } else {
+                        console.log("NOT calling Android for long-press - target:", !!target, "target.id:", target ? target.id : "N/A", "Android:", !!window.Android);
                     }
                 };
 
