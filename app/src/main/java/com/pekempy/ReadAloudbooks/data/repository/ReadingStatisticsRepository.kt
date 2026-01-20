@@ -1,15 +1,12 @@
 package com.pekempy.ReadAloudbooks.data.repository
 
 import com.pekempy.ReadAloudbooks.data.local.dao.ReadingSessionDao
-import com.pekempy.ReadAloudbooks.data.local.dao.BookMetadataDao
 import com.pekempy.ReadAloudbooks.data.local.entities.ReadingSession
-import com.pekempy.ReadAloudbooks.data.local.entities.ReadingStatus
 import kotlinx.coroutines.flow.Flow
 import java.util.Calendar
 
 class ReadingStatisticsRepository(
-    private val readingSessionDao: ReadingSessionDao,
-    private val bookMetadataDao: BookMetadataDao
+    private val readingSessionDao: ReadingSessionDao
 ) {
 
     fun getRecentSessions(limit: Int = 50): Flow<List<ReadingSession>> {
@@ -68,18 +65,6 @@ class ReadingStatisticsRepository(
         val startOfDay = calendar.timeInMillis
         val endOfDay = System.currentTimeMillis()
         return readingSessionDao.getTotalPagesReadInRange(startOfDay, endOfDay) ?: 0
-    }
-
-    suspend fun getBooksFinishedThisYear(): Int {
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.DAY_OF_YEAR, 1)
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        calendar.set(Calendar.MILLISECOND, 0)
-        val startOfYear = calendar.timeInMillis
-        val now = System.currentTimeMillis()
-        return bookMetadataDao.getBooksFinishedInRange(startOfYear, now)
     }
 
     suspend fun getCurrentReadingStreak(): Int {

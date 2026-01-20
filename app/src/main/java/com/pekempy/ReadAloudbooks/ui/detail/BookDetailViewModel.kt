@@ -11,28 +11,16 @@ import com.pekempy.ReadAloudbooks.service.DownloadService
 import kotlinx.coroutines.launch
 
 import com.pekempy.ReadAloudbooks.data.UserPreferencesRepository
-import com.pekempy.ReadAloudbooks.data.repository.BookMetadataRepository
-import com.pekempy.ReadAloudbooks.data.repository.CollectionRepository
-import com.pekempy.ReadAloudbooks.data.local.entities.ReadingStatus
-import com.pekempy.ReadAloudbooks.data.local.entities.BookCollection
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.Flow
 
 class BookDetailViewModel(
-    private val repository: UserPreferencesRepository,
-    private val metadataRepository: BookMetadataRepository,
-    private val collectionRepository: CollectionRepository
+    private val repository: UserPreferencesRepository
 ) : ViewModel() {
     var book by mutableStateOf<Book?>(null)
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var localProgress by mutableStateOf<Float?>(null)
     var serverProgress by mutableStateOf<Float?>(null)
-    var readingStatus by mutableStateOf(ReadingStatus.NONE)
-    var rating by mutableStateOf(0)
-    var showCollectionsDialog by mutableStateOf(false)
-
-    val allCollections: Flow<List<BookCollection>> = collectionRepository.getAllCollections()
 
     fun loadBook(uuid: String, showLoading: Boolean = true) {
         viewModelScope.launch {
@@ -101,52 +89,10 @@ class BookDetailViewModel(
                     queuePosition = response.readaloud?.queuePosition,
                     progress = this@BookDetailViewModel.localProgress
                 )
-
-                // Load metadata (reading status and rating)
-                loadMetadata(uuid)
             } catch (e: Exception) {
                 error = "Failed to load book: ${e.message}"
             } finally {
                 isLoading = false
-            }
-        }
-    }
-
-    private fun loadMetadata(bookId: String) {
-        viewModelScope.launch {
-            val metadata = metadataRepository.getBookMetadataSync(bookId)
-            readingStatus = metadata?.readingStatus ?: ReadingStatus.NONE
-            rating = metadata?.rating ?: 0
-        }
-    }
-
-    fun updateReadingStatus(status: ReadingStatus) {
-        val currentBookId = book?.id ?: return
-        readingStatus = status
-        viewModelScope.launch {
-            metadataRepository.updateReadingStatus(currentBookId, status)
-        }
-    }
-
-    fun updateRating(newRating: Int) {
-        val currentBookId = book?.id ?: return
-        rating = newRating
-        viewModelScope.launch {
-            metadataRepository.setBookRating(currentBookId, newRating)
-        }
-    }
-
-    suspend fun isBookInCollection(collectionId: Long, bookId: String): Boolean {
-        return collectionRepository.isBookInCollection(collectionId, bookId)
-    }
-
-    fun toggleBookInCollection(collectionId: Long) {
-        val currentBookId = book?.id ?: return
-        viewModelScope.launch {
-            if (collectionRepository.isBookInCollection(collectionId, currentBookId)) {
-                collectionRepository.removeBookFromCollection(collectionId, currentBookId)
-            } else {
-                collectionRepository.addBookToCollection(collectionId, currentBookId)
             }
         }
     }

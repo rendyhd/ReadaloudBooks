@@ -13,13 +13,10 @@ import com.pekempy.ReadAloudbooks.data.local.entities.*
         Highlight::class,
         Bookmark::class,
         ReadingSession::class,
-        BookCollection::class,
-        BookCollectionBook::class,
         AudioBookmark::class,
-        BookMetadata::class,
         ReadingGoal::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -27,9 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun highlightDao(): HighlightDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun readingSessionDao(): ReadingSessionDao
-    abstract fun bookCollectionDao(): BookCollectionDao
     abstract fun audioBookmarkDao(): AudioBookmarkDao
-    abstract fun bookMetadataDao(): BookMetadataDao
     abstract fun readingGoalDao(): ReadingGoalDao
 
     companion object {

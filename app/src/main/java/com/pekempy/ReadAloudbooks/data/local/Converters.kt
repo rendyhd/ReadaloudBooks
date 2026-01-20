@@ -4,15 +4,6 @@ import androidx.room.TypeConverter
 import com.pekempy.ReadAloudbooks.data.local.entities.*
 
 class Converters {
-    @TypeConverter
-    fun fromReadingStatus(value: ReadingStatus): String {
-        return value.name
-    }
-
-    @TypeConverter
-    fun toReadingStatus(value: String): ReadingStatus {
-        return ReadingStatus.valueOf(value)
-    }
 
     @TypeConverter
     fun fromGoalType(value: GoalType): String {
