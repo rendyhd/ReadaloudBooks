@@ -178,6 +178,7 @@ fun ReaderScreen(
                 activeSearch = viewModel.activeSearchHighlight,
                 activeSearchMatchIndex = viewModel.activeSearchMatchIndex,
                 pendingAnchor = viewModel.pendingAnchorId.value,
+                clearSelectionTrigger = viewModel.clearSelectionTrigger,
                 onTap = { viewModel.showControls = !viewModel.showControls }
             )
 
@@ -383,6 +384,7 @@ fun EpubWebView(
     activeSearch: String? = null,
     activeSearchMatchIndex: Int = 0,
     pendingAnchor: String? = null,
+    clearSelectionTrigger: Int = 0,
     onTap: () -> Unit
 ) {
     val theme = getReaderTheme(userSettings.readerTheme)
@@ -606,21 +608,34 @@ fun EpubWebView(
 
                 // Apply user highlights for current chapter
                 viewModel.highlightsForCurrentChapter.value.let { highlights ->
-                    if (highlights.isNotEmpty()) {
-                        val highlightsJson = highlights.map { h ->
+                    val highlightsJson = if (highlights.isNotEmpty()) {
+                        highlights.map { h ->
                             """{"id":${h.id},"elementId":"${h.elementId}","text":"${h.text.replace("\"", "\\\"").replace("\n", "\\n")}","color":"${h.color}"}"""
                         }.joinToString(",", "[", "]")
-
-                        val highlightsSignature = "highlights_$highlightsJson"
-                        val lastHighlightsSignature = webView.getTag(com.pekempy.ReadAloudbooks.R.id.user_highlights_tag) as? String
-
-                        if (lastHighlightsSignature != highlightsSignature) {
-                            webView.postDelayed({
-                                webView.evaluateJavascript("if (typeof setHighlights === 'function') setHighlights('${highlightsJson.replace("'", "\\'")}')", null)
-                            }, 300)
-                            webView.setTag(com.pekempy.ReadAloudbooks.R.id.user_highlights_tag, highlightsSignature)
-                        }
+                    } else {
+                        "[]"
                     }
+
+                    val highlightsSignature = "highlights_${highlights.size}_${highlights.hashCode()}"
+                    val lastHighlightsSignature = webView.getTag(com.pekempy.ReadAloudbooks.R.id.user_highlights_tag) as? String
+
+                    if (lastHighlightsSignature != highlightsSignature) {
+                        android.util.Log.d("EpubWebView", "Applying ${highlights.size} highlights to WebView")
+                        webView.postDelayed({
+                            webView.evaluateJavascript("if (typeof setHighlights === 'function') setHighlights('${highlightsJson.replace("'", "\\'")}')", null)
+                        }, 300)
+                        webView.setTag(com.pekempy.ReadAloudbooks.R.id.user_highlights_tag, highlightsSignature)
+                    }
+                }
+
+                // Clear text selection when trigger changes
+                val lastClearTrigger = webView.getTag(com.pekempy.ReadAloudbooks.R.id.clear_selection_tag) as? Int ?: -1
+                if (clearSelectionTrigger > 0 && clearSelectionTrigger != lastClearTrigger) {
+                    android.util.Log.d("EpubWebView", "Clearing text selection (trigger: $clearSelectionTrigger)")
+                    webView.postDelayed({
+                        webView.evaluateJavascript("if (typeof clearTextSelection === 'function') clearTextSelection()", null)
+                    }, 400)  // Wait a bit longer than highlight application
+                    webView.setTag(com.pekempy.ReadAloudbooks.R.id.clear_selection_tag, clearSelectionTrigger)
                 }
             }
         )
@@ -822,6 +837,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 let pageCount = 0;
                 let currentHighlightId = null;
                 let elementPageMap = {};
+                let userHighlightsCache = [];  // Store highlights globally
 
                 function getPageWidth() { return window.innerWidth; }
 
@@ -1004,7 +1020,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                          }
                     }
                     console.log("Pagination complete. Pages: " + pageCount);
-                    
+
                     const allElements = wrapper.querySelectorAll('[id]');
                     allElements.forEach(el => {
                         const page = el.closest('.page');
@@ -1013,6 +1029,12 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                             elementPageMap[el.id] = index;
                         }
                     });
+
+                    // Re-apply user highlights after pagination
+                    if (userHighlightsCache.length > 0) {
+                        console.log("Re-applying " + userHighlightsCache.length + " highlights after pagination");
+                        applyHighlights(userHighlightsCache);
+                    }
                 }
                 
                 function gotoPage(index, animate = true) {
@@ -1241,10 +1263,8 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                                 window.Android.onTextSelected(element.id, selectedText);
                             }
 
-                            // Clear selection after capturing
-                            setTimeout(function() {
-                                selection.removeAllRanges();
-                            }, 100);
+                            // DO NOT clear selection - let user see what they selected
+                            // The selection will be cleared manually after highlight creation
                         }
                     }, 500);
                 });
@@ -1266,6 +1286,8 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                 // Apply highlights to the current page
                 function applyHighlights(highlights) {
+                    console.log("Applying " + highlights.length + " highlights to DOM");
+
                     // Remove existing highlight marks
                     document.querySelectorAll('.user-highlight').forEach(mark => {
                         const parent = mark.parentNode;
@@ -1275,38 +1297,56 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                     // Apply new highlights
                     highlights.forEach(highlight => {
-                        const element = document.getElementById(highlight.elementId);
-                        if (!element) return;
-
-                        // Find and highlight the text
-                        const walker = document.createTreeWalker(
-                            element,
-                            NodeFilter.SHOW_TEXT,
-                            null,
-                            false
+                        // Find the element by ID, including paginated continuations
+                        const elements = document.querySelectorAll(
+                            `[id="${highlight.elementId}"], [data-continuation-of="${highlight.elementId}"]`
                         );
 
-                        let node;
-                        while (node = walker.nextNode()) {
-                            const text = node.textContent;
-                            const index = text.indexOf(highlight.text);
-
-                            if (index !== -1) {
-                                const range = document.createRange();
-                                range.setStart(node, index);
-                                range.setEnd(node, index + highlight.text.length);
-
-                                const mark = document.createElement('mark');
-                                mark.className = 'user-highlight';
-                                mark.style.backgroundColor = highlight.color;
-                                mark.style.color = 'inherit';
-                                mark.style.padding = '2px 0';
-                                mark.dataset.highlightId = highlight.id;
-
-                                range.surroundContents(mark);
-                                break;
-                            }
+                        if (elements.length === 0) {
+                            console.warn("Element not found for highlight:", highlight.elementId);
+                            return;
                         }
+
+                        // Try to highlight in each occurrence (handles pagination splits)
+                        elements.forEach(element => {
+                            // Find and highlight the text
+                            const walker = document.createTreeWalker(
+                                element,
+                                NodeFilter.SHOW_TEXT,
+                                null,
+                                false
+                            );
+
+                            let node;
+                            let highlighted = false;
+                            while (node = walker.nextNode()) {
+                                if (highlighted) break;  // Only highlight first occurrence per element
+
+                                const text = node.textContent;
+                                const index = text.indexOf(highlight.text);
+
+                                if (index !== -1) {
+                                    try {
+                                        const range = document.createRange();
+                                        range.setStart(node, index);
+                                        range.setEnd(node, index + highlight.text.length);
+
+                                        const mark = document.createElement('mark');
+                                        mark.className = 'user-highlight';
+                                        mark.style.backgroundColor = highlight.color;
+                                        mark.style.color = 'inherit';
+                                        mark.style.padding = '2px 0';
+                                        mark.dataset.highlightId = highlight.id;
+
+                                        range.surroundContents(mark);
+                                        highlighted = true;
+                                        console.log("Applied highlight ID " + highlight.id + " in element " + highlight.elementId);
+                                    } catch (e) {
+                                        console.error("Failed to apply highlight:", e);
+                                    }
+                                }
+                            }
+                        });
                     });
                 }
 
@@ -1314,9 +1354,19 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 function setHighlights(highlightsJson) {
                     try {
                         const highlights = JSON.parse(highlightsJson);
+                        userHighlightsCache = highlights;  // Store in global cache
+                        console.log("Stored " + highlights.length + " highlights in cache");
                         applyHighlights(highlights);
                     } catch (e) {
                         console.error('Failed to apply highlights:', e);
+                    }
+                }
+
+                // Function to clear selection (called after highlight creation)
+                function clearTextSelection() {
+                    const selection = window.getSelection();
+                    if (selection) {
+                        selection.removeAllRanges();
                     }
                 }
             </script>

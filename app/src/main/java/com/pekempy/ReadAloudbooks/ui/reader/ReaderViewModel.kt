@@ -780,6 +780,7 @@ class ReaderViewModel(
     val highlightsForCurrentChapter = mutableStateOf<List<Highlight>>(emptyList())
     var longPressedElementId by mutableStateOf<String?>(null)
     private var highlightCollectionJob: Job? = null
+    var clearSelectionTrigger by mutableIntStateOf(0)  // Trigger to clear text selection
 
     // Bookmark management
     var bookmarks = mutableStateOf<List<Bookmark>>(emptyList())
@@ -927,6 +928,10 @@ class ReaderViewModel(
             )
             highlightRepository.addHighlight(highlight)
             loadHighlightsForChapter(chapterIndex)
+
+            // Clear text selection after creating highlight
+            delay(100)  // Small delay to ensure highlight is applied first
+            clearSelectionTrigger++
         }
     }
 
