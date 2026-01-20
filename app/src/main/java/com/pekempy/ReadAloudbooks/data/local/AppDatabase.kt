@@ -13,14 +13,14 @@ import com.pekempy.ReadAloudbooks.data.local.entities.*
         Highlight::class,
         Bookmark::class,
         ReadingSession::class,
-        Collection::class,
+        BookCollection::class,
         CollectionBook::class,
         AudioBookmark::class,
         BookMetadata::class,
         ReadingGoal::class
     ],
     version = 1,
-    exportSchema = true
+    exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

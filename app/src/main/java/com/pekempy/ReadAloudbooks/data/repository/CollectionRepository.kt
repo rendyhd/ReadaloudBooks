@@ -1,29 +1,29 @@
 package com.pekempy.ReadAloudbooks.data.repository
 
 import com.pekempy.ReadAloudbooks.data.local.dao.CollectionDao
-import com.pekempy.ReadAloudbooks.data.local.entities.Collection
+import com.pekempy.ReadAloudbooks.data.local.entities.BookCollection
 import com.pekempy.ReadAloudbooks.data.local.entities.CollectionBook
 import kotlinx.coroutines.flow.Flow
 
 class CollectionRepository(private val collectionDao: CollectionDao) {
 
-    fun getAllCollections(): Flow<List<Collection>> {
+    fun getAllCollections(): Flow<List<BookCollection>> {
         return collectionDao.getAllCollections()
     }
 
-    fun getCollectionById(id: Long): Flow<Collection?> {
+    fun getCollectionById(id: Long): Flow<BookCollection?> {
         return collectionDao.getCollectionByIdFlow(id)
     }
 
-    suspend fun createCollection(collection: Collection): Long {
+    suspend fun createCollection(collection: BookCollection): Long {
         return collectionDao.insertCollection(collection)
     }
 
-    suspend fun updateCollection(collection: Collection) {
+    suspend fun updateCollection(collection: BookCollection) {
         collectionDao.updateCollection(collection)
     }
 
-    suspend fun deleteCollection(collection: Collection) {
+    suspend fun deleteCollection(collection: BookCollection) {
         collectionDao.deleteCollection(collection)
     }
 

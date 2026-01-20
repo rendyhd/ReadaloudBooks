@@ -641,7 +641,6 @@ fun BookDetailScreen(
         }
     }
 }
-}
 
 @Composable
 fun FormatIndicator(

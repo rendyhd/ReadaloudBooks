@@ -13,7 +13,7 @@ import com.pekempy.ReadAloudbooks.data.UserPreferencesRepository
 import com.pekempy.ReadAloudbooks.data.repository.BookMetadataRepository
 import com.pekempy.ReadAloudbooks.data.repository.CollectionRepository
 import com.pekempy.ReadAloudbooks.data.local.entities.ReadingStatus
-import com.pekempy.ReadAloudbooks.data.local.entities.Collection
+import com.pekempy.ReadAloudbooks.data.local.entities.BookCollection
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 
@@ -31,7 +31,7 @@ class BookDetailViewModel(
     var rating by mutableStateOf(0)
     var showCollectionsDialog by mutableStateOf(false)
 
-    val allCollections: Flow<List<Collection>> = collectionRepository.getAllCollections()
+    val allCollections: Flow<List<BookCollection>> = collectionRepository.getAllCollections()
 
     fun loadBook(uuid: String, showLoading: Boolean = true) {
         viewModelScope.launch {

@@ -81,7 +81,7 @@ class HighlightExporter {
 
             // Escape quotes and commas in CSV
             val escapedText = "\"${highlight.text.replace("\"", "\"\"")}\""
-            val escapedNote = if (highlight.note != null) "\"${highlight.note.replace("\"", "\"\"")}"" else "\"\""
+            val escapedNote = if (highlight.note != null) "\"${highlight.note.replace("\"", "\"\"")}\"" else "\"\""
             val escapedBookTitle = "\"${book.title.replace("\"", "\"\"")}\""
             val escapedAuthor = "\"${book.author.replace("\"", "\"\"")}\""
             val escapedChapterTitle = "\"${chapterTitle.replace("\"", "\"\"")}\""

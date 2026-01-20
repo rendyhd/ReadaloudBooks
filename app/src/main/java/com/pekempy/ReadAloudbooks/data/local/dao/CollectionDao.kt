@@ -1,57 +1,57 @@
 package com.pekempy.ReadAloudbooks.data.local.dao
 
 import androidx.room.*
-import com.pekempy.ReadAloudbooks.data.local.entities.Collection
-import com.pekempy.ReadAloudbooks.data.local.entities.CollectionBook
+import com.pekempy.ReadAloudbooks.data.local.entities.BookCollection
+import com.pekempy.ReadAloudbooks.data.local.entities.BookCollectionBook
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface CollectionDao {
+interface BookCollectionDao {
     @Query("SELECT * FROM collections ORDER BY updatedAt DESC")
-    fun getAllCollections(): Flow<List<Collection>>
+    fun getAllBookCollections(): Flow<List<BookCollection>>
 
     @Query("SELECT * FROM collections WHERE id = :id")
-    suspend fun getCollectionById(id: Long): Collection?
+    suspend fun getBookCollectionById(id: Long): BookCollection?
 
     @Query("SELECT * FROM collections WHERE id = :id")
-    fun getCollectionByIdFlow(id: Long): Flow<Collection?>
+    fun getBookCollectionByIdFlow(id: Long): Flow<BookCollection?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCollection(collection: Collection): Long
+    suspend fun insertBookCollection(collection: BookCollection): Long
 
     @Update
-    suspend fun updateCollection(collection: Collection)
+    suspend fun updateBookCollection(collection: BookCollection)
 
     @Delete
-    suspend fun deleteCollection(collection: Collection)
+    suspend fun deleteBookCollection(collection: BookCollection)
 
-    // CollectionBook operations
+    // BookCollectionBook operations
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCollectionBook(collectionBook: CollectionBook)
+    suspend fun insertBookCollectionBook(collectionBook: BookCollectionBook)
 
     @Delete
-    suspend fun deleteCollectionBook(collectionBook: CollectionBook)
+    suspend fun deleteBookCollectionBook(collectionBook: BookCollectionBook)
 
     @Query("SELECT bookId FROM collection_books WHERE collectionId = :collectionId ORDER BY addedAt DESC")
-    fun getBooksInCollection(collectionId: Long): Flow<List<String>>
+    fun getBooksInBookCollection(collectionId: Long): Flow<List<String>>
 
     @Query("SELECT collectionId FROM collection_books WHERE bookId = :bookId")
-    fun getCollectionsForBook(bookId: String): Flow<List<Long>>
+    fun getBookCollectionsForBook(bookId: String): Flow<List<Long>>
 
     @Query("DELETE FROM collection_books WHERE collectionId = :collectionId")
-    suspend fun removeAllBooksFromCollection(collectionId: Long)
+    suspend fun removeAllBooksFromBookCollection(collectionId: Long)
 
     @Query("DELETE FROM collection_books WHERE bookId = :bookId")
-    suspend fun removeBookFromAllCollections(bookId: String)
+    suspend fun removeBookFromAllBookCollections(bookId: String)
 
     @Query("SELECT COUNT(*) FROM collection_books WHERE collectionId = :collectionId")
-    suspend fun getBookCountInCollection(collectionId: Long): Int
+    suspend fun getBookCountInBookCollection(collectionId: Long): Int
 
     @Query("SELECT EXISTS(SELECT 1 FROM collection_books WHERE collectionId = :collectionId AND bookId = :bookId)")
-    suspend fun isBookInCollection(collectionId: Long, bookId: String): Boolean
+    suspend fun isBookInBookCollection(collectionId: Long, bookId: String): Boolean
 
     @Query("SELECT * FROM collections WHERE syncedToServer = 0")
-    suspend fun getUnsyncedCollections(): List<Collection>
+    suspend fun getUnsyncedBookCollections(): List<BookCollection>
 
     @Query("UPDATE collections SET syncedToServer = 1, serverId = :serverId WHERE id = :id")
     suspend fun markAsSynced(id: Long, serverId: String)

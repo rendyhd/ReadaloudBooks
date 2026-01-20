@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pekempy.ReadAloudbooks.data.local.entities.Collection
+import com.pekempy.ReadAloudbooks.data.local.entities.BookCollection
 import com.pekempy.ReadAloudbooks.data.repository.CollectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,15 +32,15 @@ class CollectionsViewModel(
     private val repository: CollectionRepository
 ) : ViewModel() {
 
-    val collections: kotlinx.coroutines.flow.Flow<List<Collection>> = repository.getAllCollections()
+    val collections: kotlinx.coroutines.flow.Flow<List<BookCollection>> = repository.getAllCollections()
 
     var showCreateDialog by mutableStateOf(false)
-    var editingCollection by mutableStateOf<Collection?>(null)
+    var editingCollection by mutableStateOf<BookCollection?>(null)
 
     fun createCollection(name: String, description: String?, colorHex: String?) {
         viewModelScope.launch {
             repository.createCollection(
-                Collection(
+                BookCollection(
                     name = name,
                     description = description,
                     colorHex = colorHex
@@ -49,13 +49,13 @@ class CollectionsViewModel(
         }
     }
 
-    fun updateCollection(collection: Collection) {
+    fun updateCollection(collection: BookCollection) {
         viewModelScope.launch {
             repository.updateCollection(collection)
         }
     }
 
-    fun deleteCollection(collection: Collection) {
+    fun deleteCollection(collection: BookCollection) {
         viewModelScope.launch {
             repository.deleteCollection(collection)
         }
@@ -84,7 +84,7 @@ class CollectionsViewModel(
 fun CollectionsScreen(
     viewModel: CollectionsViewModel,
     onBack: () -> Unit,
-    onCollectionClick: (Collection) -> Unit
+    onCollectionClick: (BookCollection) -> Unit
 ) {
     val collections by viewModel.collections.collectAsState(initial = emptyList())
 
@@ -159,7 +159,7 @@ fun CollectionsScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionCard(
-    collection: Collection,
+    collection: BookCollection,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -253,7 +253,7 @@ fun CollectionCard(
 
 @Composable
 fun CollectionDialog(
-    collection: Collection? = null,
+    collection: BookCollection? = null,
     onDismiss: () -> Unit,
     onSave: (name: String, description: String?, color: String?) -> Unit
 ) {

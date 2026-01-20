@@ -10,7 +10,7 @@ import androidx.room.Index
     indices = [Index(value = ["collectionId"]), Index(value = ["bookId"])],
     foreignKeys = [
         ForeignKey(
-            entity = Collection::class,
+            entity = BookCollection::class,
             parentColumns = ["id"],
             childColumns = ["collectionId"],
             onDelete = ForeignKey.CASCADE
