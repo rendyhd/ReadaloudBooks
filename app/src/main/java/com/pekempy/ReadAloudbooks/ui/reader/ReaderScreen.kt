@@ -1299,7 +1299,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     highlights.forEach(highlight => {
                         // Find the element by ID, including paginated continuations
                         const elements = document.querySelectorAll(
-                            `[id="${highlight.elementId}"], [data-continuation-of="${highlight.elementId}"]`
+                            `[id="${'$'}{highlight.elementId}"], [data-continuation-of="${'$'}{highlight.elementId}"]`
                         );
 
                         if (elements.length === 0) {
