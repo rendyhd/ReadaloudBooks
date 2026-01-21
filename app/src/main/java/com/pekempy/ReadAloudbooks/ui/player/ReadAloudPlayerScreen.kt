@@ -64,9 +64,11 @@ fun ReadAloudPlayerScreen(
     var showHighlightsSheet by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showHistorySheet by remember { mutableStateOf(false) }
+    var showBookmarksSheet by remember { mutableStateOf(false) }
 
     // Collect highlights for the book
     val highlights by readerViewModel.getHighlightsForBook().collectAsState(initial = emptyList())
+    val bookmarks by readerViewModel.bookmarks
 
     // Foldable device support
     val foldableState by rememberFoldableState()
@@ -433,6 +435,13 @@ fun ReadAloudPlayerScreen(
                             tint = Color(theme.textInt)
                         )
                     }
+                    IconButton(onClick = { showBookmarksSheet = true }) {
+                        Icon(
+                            painterResource(R.drawable.ic_bookmark),
+                            contentDescription = "Bookmarks",
+                            tint = Color(theme.textInt)
+                        )
+                    }
                     IconButton(onClick = { showHistorySheet = true }) {
                         Icon(
                             painterResource(R.drawable.ic_history),
@@ -641,6 +650,23 @@ fun ReadAloudPlayerScreen(
                         // Also sync audio position
                         readAloudAudioViewModel.seekTo(event.audioPositionMs)
                         showHistorySheet = false
+                    }
+                )
+            }
+        }
+
+        if (showBookmarksSheet) {
+            ModalBottomSheet(onDismissRequest = { showBookmarksSheet = false }) {
+                BookmarksSheet(
+                    bookmarks = bookmarks,
+                    onBookmarkClick = { bookmark ->
+                        readerViewModel.navigateToBookmark(bookmark)
+                        showBookmarksSheet = false
+                    },
+                    onDeleteBookmark = { readerViewModel.deleteBookmark(it) },
+                    onAddBookmark = {
+                        readerViewModel.createBookmark()
+                        showBookmarksSheet = false
                     }
                 )
             }
