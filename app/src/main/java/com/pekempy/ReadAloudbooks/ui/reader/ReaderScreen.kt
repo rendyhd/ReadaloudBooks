@@ -12,6 +12,7 @@ import com.pekempy.ReadAloudbooks.R
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -339,24 +340,28 @@ fun ReaderScreen(
             )
         }
 
-        // Handle pending highlight creation
-        LaunchedEffect(viewModel.pendingHighlight, showLongPressMenu) {
-            val pending = viewModel.pendingHighlight
-            android.util.Log.d("ReaderScreen", "LaunchedEffect triggered: pendingHighlight=$pending, showLongPressMenu=$showLongPressMenu")
-            if (pending != null && !showLongPressMenu) {
-                android.util.Log.d("ReaderScreen", "Showing color picker for drag-select highlight")
-                showColorPicker = true
-            }
+        // Handle pending highlight creation - use snapshotFlow for reliable state observation
+        LaunchedEffect(Unit) {
+            snapshotFlow { viewModel.pendingHighlight to showLongPressMenu }
+                .collect { (pending, isLongPressMenuShowing) ->
+                    android.util.Log.d("ReaderScreen", "snapshotFlow pendingHighlight: pending=$pending, showLongPressMenu=$isLongPressMenuShowing")
+                    if (pending != null && !isLongPressMenuShowing && !showColorPicker) {
+                        android.util.Log.d("ReaderScreen", "Showing color picker for drag-select highlight")
+                        showColorPicker = true
+                    }
+                }
         }
 
-        // Handle long press menu
-        LaunchedEffect(viewModel.longPressedElementId) {
-            val elementId = viewModel.longPressedElementId
-            android.util.Log.d("ReaderScreen", "Long-press LaunchedEffect triggered: elementId=$elementId")
-            if (elementId != null) {
-                android.util.Log.d("ReaderScreen", "Showing long-press menu")
-                showLongPressMenu = true
-            }
+        // Handle long press menu - use snapshotFlow for reliable state observation
+        LaunchedEffect(Unit) {
+            snapshotFlow { viewModel.longPressedElementId }
+                .collect { elementId ->
+                    android.util.Log.d("ReaderScreen", "snapshotFlow longPressedElementId: elementId=$elementId")
+                    if (elementId != null && !showLongPressMenu) {
+                        android.util.Log.d("ReaderScreen", "Showing long-press menu")
+                        showLongPressMenu = true
+                    }
+                }
         }
 
         if (showLongPressMenu && viewModel.longPressedElementId != null) {
