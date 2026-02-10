@@ -1,5 +1,8 @@
 package com.pekempy.ReadAloudbooks.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -90,10 +94,10 @@ fun SettingsHome(
             ) { onNavigateTo("statistics") }
 
             SettingsNavItem(
-                title = "Collections",
-                subtitle = "Organize your books",
-                iconRes = R.drawable.ic_folder
-            ) { onNavigateTo("collections") }
+                title = "Backup & Restore",
+                subtitle = "Export and import your data",
+                iconRes = R.drawable.ic_history
+            ) { onNavigateTo("settings/backup") }
 
             SettingsNavItem(
                 title = "Support",
@@ -673,6 +677,116 @@ fun SettingsSupport(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsBackup(
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+
+    val backupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        uri?.let { viewModel.createBackup(context, it) }
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.restoreBackup(context, it) }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Backup & Restore") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                )
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            SettingsSection("Backup") {
+                Text(
+                    "Export your highlights, bookmarks, reading sessions, and goals to a JSON file.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                            .format(java.util.Date())
+                        backupLauncher.launch("readaloud_backup_$timestamp.json")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !viewModel.isBackingUp
+                ) {
+                    if (viewModel.isBackingUp) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("Create Backup")
+                }
+            }
+
+            SettingsSection("Restore") {
+                Text(
+                    "Import data from a previous backup file. Existing data will not be overwritten.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        restoreLauncher.launch(arrayOf("application/json"))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !viewModel.isBackingUp
+                ) {
+                    Text("Restore from Backup")
+                }
+            }
+
+            viewModel.backupStatus?.let { status ->
+                val isError = status.contains("failed", ignoreCase = true)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isError) MaterialTheme.colorScheme.errorContainer
+                           else MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = status,
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isError) MaterialTheme.colorScheme.onErrorContainer
+                               else MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
         }
     }
 }

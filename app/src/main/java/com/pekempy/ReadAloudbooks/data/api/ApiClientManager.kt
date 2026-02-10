@@ -39,8 +39,14 @@ class ApiClientManager {
         baseUrl = cleanUrl
         token = authToken
 
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+        val logging = HttpLoggingInterceptor { message ->
+            // Redact authorization tokens and sensitive URL parameters from logs
+            val redacted = message
+                .replace(Regex("Bearer [A-Za-z0-9._-]+"), "Bearer [REDACTED]")
+                .replace(Regex("token=[^&\\s]+"), "token=[REDACTED]")
+            android.util.Log.d("OkHttp", redacted)
+        }.apply {
+            level = HttpLoggingInterceptor.Level.HEADERS
         }
 
         val authInterceptor = Interceptor { chain ->

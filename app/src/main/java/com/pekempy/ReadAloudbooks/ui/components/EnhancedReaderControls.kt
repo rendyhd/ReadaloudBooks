@@ -1,5 +1,6 @@
 package com.pekempy.ReadAloudbooks.ui.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,12 +25,14 @@ fun EnhancedReaderControlsSheet(
     onMarginSizeChange: (Int) -> Unit,
     onTextAlignmentChange: (String) -> Unit,
     onFullscreenToggle: (Boolean) -> Unit,
+    onAutoHideToolbarToggle: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .animateContentSize()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -39,8 +42,10 @@ fun EnhancedReaderControlsSheet(
                 fontWeight = FontWeight.Bold
             )
 
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
             // Brightness Control
-            ReaderSettingSection(title = "Brightness") {
+            ReaderSettingSection(title = "Brightness", value = "${(userSettings.readerBrightness * 100).toInt()}%") {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -54,15 +59,12 @@ fun EnhancedReaderControlsSheet(
                     )
                     Text("☀️", style = MaterialTheme.typography.titleMedium)
                 }
-                Text(
-                    "${(userSettings.readerBrightness * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
             // Line Spacing Control
-            ReaderSettingSection(title = "Line Spacing") {
+            ReaderSettingSection(title = "Line Spacing", value = "${String.format("%.1f", userSettings.readerLineSpacing)}x") {
                 Slider(
                     value = userSettings.readerLineSpacing,
                     onValueChange = onLineSpacingChange,
@@ -73,18 +75,16 @@ fun EnhancedReaderControlsSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Tight", style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        "${String.format("%.1f", userSettings.readerLineSpacing)}x",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("Loose", style = MaterialTheme.typography.bodySmall)
+                    Text("Tight", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Loose", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
             // Margin Size
-            ReaderSettingSection(title = "Margins") {
+            val marginLabel = when(userSettings.readerMarginSize) { 0 -> "Compact"; 1 -> "Normal"; else -> "Wide" }
+            ReaderSettingSection(title = "Margins", value = marginLabel) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -107,8 +107,11 @@ fun EnhancedReaderControlsSheet(
                 }
             }
 
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
             // Text Alignment
-            ReaderSettingSection(title = "Text Alignment") {
+            val alignLabel = userSettings.readerTextAlignment.replaceFirstChar { it.uppercase() }
+            ReaderSettingSection(title = "Text Alignment", value = alignLabel) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -130,6 +133,8 @@ fun EnhancedReaderControlsSheet(
                     )
                 }
             }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Fullscreen Mode
             Row(
@@ -157,6 +162,32 @@ fun EnhancedReaderControlsSheet(
                 )
             }
 
+            // Auto-hide Toolbar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Auto-hide Toolbar",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Hide toolbar after 4 seconds",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = userSettings.readerAutoHideToolbar,
+                    onCheckedChange = onAutoHideToolbarToggle
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -165,17 +196,32 @@ fun EnhancedReaderControlsSheet(
 @Composable
 fun ReaderSettingSection(
     title: String,
+    value: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
+            if (value != null) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
         content()
     }
 }

@@ -1,6 +1,8 @@
 package com.pekempy.ReadAloudbooks.ui.player
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -89,16 +91,21 @@ fun MiniPlayerBar(
         shadowElevation = 8.dp
     ) {
         Column {
-            val progress = when {
-                isReadAloud && readAloudViewModel.duration > 0 -> 
+            val rawProgress = when {
+                isReadAloud && readAloudViewModel.duration > 0 ->
                     readAloudViewModel.currentPosition.toFloat() / readAloudViewModel.duration
-                !isReadAloud && audiobookViewModel.duration > 0 -> 
+                !isReadAloud && audiobookViewModel.duration > 0 ->
                     audiobookViewModel.currentPosition.toFloat() / audiobookViewModel.duration
                 else -> 0f
             }
-            
+            val animatedProgress by animateFloatAsState(
+                targetValue = rawProgress,
+                animationSpec = tween(durationMillis = 300),
+                label = "miniPlayerProgress"
+            )
+
             LinearProgressIndicator(
-                progress = { progress },
+                progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp),
@@ -166,6 +173,23 @@ fun MiniPlayerBar(
                     )
                 }
                 
+                val currentSpeed = if (isReadAloud) readAloudViewModel.playbackSpeed else audiobookViewModel.playbackSpeed
+                if (currentSpeed != 1.0f) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = "${"%.1f".format(currentSpeed)}x",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
                 IconButton(
                     onClick = {
                         if (isReadAloud) {

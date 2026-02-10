@@ -27,8 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -477,36 +477,72 @@ fun LibraryScreen(
                         )
 
                         if (targetMode == LibraryViewModel.ViewMode.Library || viewModel.selectedFilter != null) {
-                            val gridState = rememberLazyGridState()
-                            
-                            val totalItems = viewModel.books.size
-                            LaunchedEffect(gridState.firstVisibleItemIndex) {
-                                if (totalItems > 0 && gridState.layoutInfo.visibleItemsInfo.isNotEmpty()) {
-                                    val lastVisibleItemIndex = gridState.layoutInfo.visibleItemsInfo.last().index
-                                    if (lastVisibleItemIndex >= totalItems - 10) {
-                                        viewModel.loadNextPage()
+                            if (viewModel.books.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(contentPadding),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            painterResource(
+                                                if (viewModel.searchQuery.isNotEmpty()) R.drawable.ic_search
+                                                else R.drawable.ic_book
+                                            ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(64.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            if (viewModel.searchQuery.isNotEmpty()) "No results found"
+                                            else "Your library is empty",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            if (viewModel.searchQuery.isNotEmpty()) "Try a different search term"
+                                            else "Connect to a server to start adding books",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            textAlign = TextAlign.Center
+                                        )
                                     }
                                 }
-                            }
+                            } else {
+                                val gridState = rememberLazyGridState()
 
-                            LazyVerticalGrid(
-                                state = gridState,
-                                columns = GridCells.Fixed(2),
-                                contentPadding = contentPadding,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(viewModel.books) { book ->
-                                    BookItem(
-                                        book = book,
-                                        downloadProgress = viewModel.downloadingBooks[book.id]?.progress,
-                                        onClick = { onBookClick(book) },
-                                        onLongClick = {
-                                            selectedBookForMenu = book
-                                            showMenu = true
-                                        },
-                                        onDownloadClick = { viewModel.downloadBook(book) }
-                                    )
+                                val totalItems = viewModel.books.size
+                                LaunchedEffect(gridState.firstVisibleItemIndex) {
+                                    if (totalItems > 0 && gridState.layoutInfo.visibleItemsInfo.isNotEmpty()) {
+                                        val lastVisibleItemIndex = gridState.layoutInfo.visibleItemsInfo.last().index
+                                        if (lastVisibleItemIndex >= totalItems - 10) {
+                                            viewModel.loadNextPage()
+                                        }
+                                    }
+                                }
+
+                                LazyVerticalGrid(
+                                    state = gridState,
+                                    columns = GridCells.Fixed(2),
+                                    contentPadding = contentPadding,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(viewModel.books) { book ->
+                                        BookItem(
+                                            book = book,
+                                            downloadProgress = viewModel.downloadingBooks[book.id]?.progress,
+                                            onClick = { onBookClick(book) },
+                                            onLongClick = {
+                                                selectedBookForMenu = book
+                                                showMenu = true
+                                            },
+                                            onDownloadClick = { viewModel.downloadBook(book) }
+                                        )
+                                    }
                                 }
                             }
                         } else if (targetMode == LibraryViewModel.ViewMode.Authors) {

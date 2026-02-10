@@ -1,11 +1,14 @@
 package com.pekempy.ReadAloudbooks.ui.settings
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pekempy.ReadAloudbooks.data.UserPreferencesRepository
+import com.pekempy.ReadAloudbooks.util.BackupManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -25,6 +28,10 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     var readerTheme by mutableStateOf(0)
     var readerFontFamily by mutableStateOf("serif")
     var playbackSpeed by mutableStateOf(1.0f)
+
+    // Backup state
+    var backupStatus by mutableStateOf<String?>(null)
+    var isBackingUp by mutableStateOf(false)
 
     init {
         viewModelScope.launch {
@@ -99,5 +106,33 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     fun updatePlaybackSpeed(speed: Float) {
         playbackSpeed = speed
         viewModelScope.launch { repository.updatePlaybackSpeed(speed) }
+    }
+
+    fun createBackup(context: Context, uri: Uri) {
+        isBackingUp = true
+        backupStatus = null
+        viewModelScope.launch {
+            val result = BackupManager.createBackup(context, uri)
+            result.onSuccess { count ->
+                backupStatus = "Backup created: $count items exported"
+            }.onFailure { e ->
+                backupStatus = "Backup failed: ${e.message}"
+            }
+            isBackingUp = false
+        }
+    }
+
+    fun restoreBackup(context: Context, uri: Uri) {
+        isBackingUp = true
+        backupStatus = null
+        viewModelScope.launch {
+            val result = BackupManager.restoreBackup(context, uri)
+            result.onSuccess { count ->
+                backupStatus = "Restore completed: $count items imported"
+            }.onFailure { e ->
+                backupStatus = "Restore failed: ${e.message}"
+            }
+            isBackingUp = false
+        }
     }
 }

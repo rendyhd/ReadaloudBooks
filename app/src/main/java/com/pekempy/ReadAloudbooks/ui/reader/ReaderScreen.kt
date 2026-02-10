@@ -1,5 +1,6 @@
 package com.pekempy.ReadAloudbooks.ui.reader
 
+import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.*
@@ -53,9 +54,19 @@ fun ReaderScreen(
     var showColorPicker by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showLongPressMenu by remember { mutableStateOf(false) }
+    var showToolbar by remember { mutableStateOf(true) }
 
     val highlights by viewModel.getHighlightsForBook().collectAsState(initial = emptyList())
     val bookmarks by viewModel.bookmarks
+
+    // Auto-hide toolbar after 4 seconds when setting is enabled
+    val autoHideEnabled = userSettings?.readerAutoHideToolbar ?: true
+    LaunchedEffect(showToolbar, autoHideEnabled) {
+        if (showToolbar && autoHideEnabled) {
+            kotlinx.coroutines.delay(4000)
+            showToolbar = false
+        }
+    }
 
     // Foldable device support
     val foldableState by rememberFoldableState()
@@ -132,16 +143,14 @@ fun ReaderScreen(
     // Collect highlight events from ViewModel using SharedFlow
     // This bypasses Compose state observation issues
     LaunchedEffect(Unit) {
-        android.util.Log.e("ReaderScreen", "=== Starting highlightEvents collector ===")
         viewModel.highlightEvents.collect { event ->
-            android.util.Log.e("ReaderScreen", "=== RECEIVED event: $event ===")
             when (event) {
                 is ReaderViewModel.HighlightEvent.ShowLongPressMenu -> {
-                    android.util.Log.e("ReaderScreen", "=== SHOWING long press menu for: ${event.elementId} ===")
+                    android.util.Log.d("ReaderScreen", "Showing long press menu for: ${event.elementId}")
                     showLongPressMenu = true
                 }
                 is ReaderViewModel.HighlightEvent.ShowColorPicker -> {
-                    android.util.Log.e("ReaderScreen", "=== SHOWING color picker for: ${event.pendingHighlight.text.take(20)} ===")
+                    android.util.Log.d("ReaderScreen", "Showing color picker for selection")
                     showColorPicker = true
                 }
             }
@@ -222,29 +231,47 @@ fun ReaderScreen(
                 activeSearchMatchIndex = viewModel.activeSearchMatchIndex,
                 pendingAnchor = viewModel.pendingAnchorId.value,
                 clearSelectionTrigger = viewModel.clearSelectionTrigger,
-                onTap = { viewModel.showControls = !viewModel.showControls },
+                onTap = {
+                    showToolbar = !showToolbar
+                    if (!showToolbar) viewModel.showControls = false
+                },
                 isTwoPageMode = isTwoPageMode,
                 pageGapDp = viewModel.innerScreenSettings?.pageGap ?: 16
             )
 
+            AnimatedVisibility(
+                visible = showToolbar,
+                enter = fadeIn() + slideInVertically { -it },
+                exit = fadeOut() + slideOutVertically { -it },
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
             Row(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .background(Color(theme.bgInt).copy(alpha = 0.95f))
                     .statusBarsPadding()
-                    .height(56.dp) 
+                    .height(56.dp)
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            Color(theme.textInt).copy(alpha = 0.08f),
+                            CircleShape
+                        )
+                ) {
                     Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back", tint = Color(theme.textInt))
                 }
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    viewModel.epubTitle + " (v2.1)", 
+                    viewModel.epubTitle,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium, 
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = Color(theme.textInt)
                 )
                 IconButton(onClick = {
@@ -253,10 +280,10 @@ fun ReaderScreen(
                 }) {
                     Icon(painterResource(R.drawable.ic_search), contentDescription = "Search", tint = Color(theme.textInt))
                 }
-                
+
                 Box(contentAlignment = Alignment.TopEnd) {
                     IconButton(onClick = { showHighlightsSheet = true }) {
-                        Icon(painterResource(R.drawable.ic_highlight), contentDescription = "Highlights", tint = Color.Magenta)
+                        Icon(painterResource(R.drawable.ic_highlight), contentDescription = "Highlights", tint = MaterialTheme.colorScheme.tertiary)
                     }
                     if (highlights.isNotEmpty()) {
                         Badge(
@@ -274,6 +301,7 @@ fun ReaderScreen(
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = Color(theme.textInt))
                 }
             }
+            } // AnimatedVisibility (toolbar)
 
             // Scrim to dismiss settings when tapping outside
             if (viewModel.showControls) {
@@ -369,6 +397,8 @@ fun ReaderScreen(
                             color = color
                         )
                         viewModel.pendingHighlight = null
+                        // Haptic feedback on highlight creation
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     }
                     showColorPicker = false
                 },
@@ -517,20 +547,26 @@ fun EpubWebView(
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            
-                            viewModel.activeSearchHighlight?.let { search ->
-                                val index = viewModel.activeSearchMatchIndex
-                                android.util.Log.d("EpubWebView", "onPageFinished: scheduling findAndHighlight('$search', 0, $index)")
+
+                            // Batch post-load JS calls into a single evaluateJavascript for performance
+                            val search = viewModel.activeSearchHighlight
+                            val index = viewModel.activeSearchMatchIndex
+                            val anchor = viewModel.pendingAnchorId.value
+
+                            if (search != null || anchor != null) {
                                 view?.postDelayed({
-                                    android.util.Log.d("EpubWebView", "onPageFinished: executing findAndHighlight")
-                                    view.evaluateJavascript("findAndHighlight('$search', 0, $index)", null)
+                                    val jsBatch = buildString {
+                                        if (search != null) {
+                                            append("findAndHighlight('$search', 0, $index);")
+                                            view?.setTag(com.pekempy.ReadAloudbooks.R.id.search_tag, search)
+                                        }
+                                        if (anchor != null) {
+                                            append("if (typeof highlightElement === 'function') highlightElement('$anchor', 0);")
+                                            view?.setTag(com.pekempy.ReadAloudbooks.R.id.anchor_tag, anchor)
+                                        }
+                                    }
+                                    view?.evaluateJavascript(jsBatch, null)
                                 }, 300)
-                                view?.setTag(com.pekempy.ReadAloudbooks.R.id.search_tag, search)
-                            }
-                            
-                            viewModel.pendingAnchorId.value?.let { anchor ->
-                                view?.evaluateJavascript("if (typeof highlightElement === 'function') highlightElement('$anchor', 0)", null)
-                                view?.setTag(com.pekempy.ReadAloudbooks.R.id.anchor_tag, anchor)
                             }
                         }
                     }
@@ -683,7 +719,7 @@ fun EpubWebView(
                         
                         if (lastId != id || lastTrigger != trigger) {
                             android.util.Log.d("EpubWebView", "Highlighting: $id (trigger $trigger)")
-                            webView.evaluateJavascript("if (typeof highlightElement === 'function') highlightElement('$id', 0, true)", null)
+                            webView.evaluateJavascript("if (typeof highlightElementDebounced === 'function') highlightElementDebounced('$id', 0, true); else if (typeof highlightElement === 'function') highlightElement('$id', 0, true)", null)
                             webView.setTag(com.pekempy.ReadAloudbooks.R.id.highlight_tag, id)
                             webView.setTag(com.pekempy.ReadAloudbooks.R.id.trigger_tag, trigger)
                         }
@@ -804,7 +840,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
     return """
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
             <style>
@@ -888,6 +924,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 .page, .page *:not(.highlight):not(.search-highlight) {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
+                    word-break: break-word;
                     -webkit-hyphens: auto;
                     hyphens: auto;
                     font-size: var(--font-size) !important;
@@ -967,6 +1004,16 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                 mark.user-highlight {
                     background-color: #FFEB3B !important;
+                }
+
+                @keyframes highlight-flash {
+                    0% { opacity: 0.4; }
+                    50% { opacity: 1; }
+                    100% { opacity: 1; }
+                }
+
+                .user-highlight-new {
+                    animation: highlight-flash 0.4s ease-out;
                 }
 
                 [data-theme="2"] .highlight, [data-theme="3"] .highlight {
@@ -1056,7 +1103,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         let min = 0;
                         let max = text.length;
                         let safe = 0;
-                        
+
                         while (min <= max) {
                             const mid = Math.floor((min + max) / 2);
                             const chunk = text.substring(0, mid);
@@ -1068,17 +1115,24 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                                 max = mid - 1;
                             }
                         }
-                        
+
                         // Respect word boundaries
-                        if (safe < text.length) {
-                             const lastSpace = text.lastIndexOf(' ', safe);
-                             if (lastSpace > 0) {
-                                 safe = lastSpace + 1; // Include the space on the first page
-                             }
+                        if (safe > 0 && safe < text.length) {
+                            // Check if we're mid-word (char before split is not a space, char at split is not a space)
+                            if (text[safe] !== ' ' && safe > 0 && text[safe - 1] !== ' ') {
+                                const lastSpace = text.lastIndexOf(' ', safe);
+                                if (lastSpace > 0) {
+                                    safe = lastSpace + 1; // Split after the space
+                                }
+                                // If no space found (lastSpace <= 0), keep safe as-is
+                                // and rely on CSS hyphens:auto to handle the long word
+                            }
                         }
-                        
+
                         const firstPart = text.substring(0, safe);
-                        const secondPart = text.substring(safe);
+                        let secondPart = text.substring(safe);
+                        // Trim leading whitespace from the next page to avoid visual artifact
+                        secondPart = secondPart.replace(/^\s+/, '');
                         textNode.textContent = firstPart;
                         if (!secondPart) return null;
                         return document.createTextNode(secondPart);
@@ -1167,7 +1221,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                          const node = fragment.childNodes[0];
                          fragment.removeChild(node);
                          currentPageDiv.appendChild(node);
-                         
+
                          if (currentPageDiv.scrollHeight > pageLimit) {
                              currentPageDiv.removeChild(node);
                              if (node.nodeType === Node.TEXT_NODE) {
@@ -1183,6 +1237,16 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                                  } else {
                                      splitElementAcrossPages(node, currentPageDiv);
                                  }
+                             }
+                         } else if (node.nodeType === Node.ELEMENT_NODE && /^H[1-6]$/.test(node.tagName)) {
+                             // Prevent orphaned headings: if a heading fits but takes up > 85% of remaining space,
+                             // push it to the next page so it has content following it
+                             const remaining = pageLimit - currentPageDiv.scrollHeight;
+                             const headingHeight = node.offsetHeight || 0;
+                             if (remaining < headingHeight * 0.6 && fragment.childNodes.length > 0) {
+                                 currentPageDiv.removeChild(node);
+                                 startNewPage();
+                                 currentPageDiv.appendChild(node);
                              }
                          }
                     }
@@ -1281,6 +1345,13 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     }
                 }
                 
+                // Debounced wrapper to prevent rapid highlight jumps during read-aloud
+                let highlightDebounceTimer = null;
+                function highlightElementDebounced(id, retry, animated) {
+                    clearTimeout(highlightDebounceTimer);
+                    highlightDebounceTimer = setTimeout(() => highlightElement(id, retry || 0, animated !== false), 80);
+                }
+
                 function highlightElement(id, retry = 0, animated = true) {
                     if (!id) return;
                     
@@ -1309,7 +1380,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     let totalLen = 0;
                     parts.forEach(p => totalLen += p.textContent.length);
                     
-                    if (totalLen < 40) {
+                    if (totalLen < 100) {
                          const lastPart = parts[parts.length - 1];
                          const page = lastPart.closest('.page');
                          
@@ -1473,24 +1544,35 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         const selection = window.getSelection();
                         if (selection && selection.toString().trim().length > 0) {
                             const selectedText = selection.toString().trim();
-                            let element = selection.anchorNode;
 
-                            // Find parent element with ID
-                            while (element && element.nodeType !== Node.ELEMENT_NODE) {
-                                element = element.parentNode;
+                            // Find anchor element with ID
+                            let anchorEl = selection.anchorNode;
+                            while (anchorEl && anchorEl.nodeType !== Node.ELEMENT_NODE) {
+                                anchorEl = anchorEl.parentNode;
                             }
-                            while (element && !element.id && !element.getAttribute('data-continuation-of')) {
-                                element = element.parentElement;
+                            while (anchorEl && !anchorEl.id && !anchorEl.getAttribute('data-continuation-of')) {
+                                anchorEl = anchorEl.parentElement;
                             }
+                            const anchorId = anchorEl ? (anchorEl.id || anchorEl.getAttribute('data-continuation-of')) : null;
 
-                            const elementId = element ? (element.id || element.getAttribute('data-continuation-of')) : null;
-                            console.log("Found element ID:", elementId || "none");
+                            // Find focus element with ID (for cross-page selections)
+                            let focusEl = selection.focusNode;
+                            while (focusEl && focusEl.nodeType !== Node.ELEMENT_NODE) {
+                                focusEl = focusEl.parentNode;
+                            }
+                            while (focusEl && !focusEl.id && !focusEl.getAttribute('data-continuation-of')) {
+                                focusEl = focusEl.parentElement;
+                            }
+                            const focusId = focusEl ? (focusEl.id || focusEl.getAttribute('data-continuation-of')) : null;
+
+                            const elementId = anchorId;
+                            console.log("Found anchor ID:", anchorId || "none", "focus ID:", focusId || "none");
 
                             if (elementId && window.Android) {
                                 console.log("Calling Android.onTextSelected with text: " + selectedText.substring(0, 30) + "...");
                                 window.Android.onTextSelected(elementId, selectedText);
                             } else {
-                                console.log("NOT calling Android - element:", !!element, "element.id:", element ? element.id : "N/A", "Android:", !!window.Android);
+                                console.log("NOT calling Android - element:", !!anchorEl, "element.id:", anchorEl ? anchorEl.id : "N/A", "Android:", !!window.Android);
                             }
 
                             // DO NOT clear selection - let user see what they selected
@@ -1498,7 +1580,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                         } else {
                             console.log("No selection or empty selection");
                         }
-                    }, 500);  // Increased delay to ensure long-press is detected first
+                    }, 300);  // Debounce for snappier highlight feel
                 });
 
                 // Disable default context menu completely
@@ -1673,7 +1755,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                                 range.setEnd(info.node, info.end);
 
                                 const mark = document.createElement('mark');
-                                mark.className = 'user-highlight';
+                                mark.className = 'user-highlight user-highlight-new';
                                 mark.setAttribute('style', 'background-color: ' + color + ' !important; color: inherit !important; padding: 2px 0; border-radius: 2px;');
                                 mark.dataset.highlightId = highlightId;
                                 mark.onclick = function(e) {
@@ -1780,7 +1862,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                                 range.setEnd(info.node, info.end);
 
                                 const mark = document.createElement('mark');
-                                mark.className = 'user-highlight';
+                                mark.className = 'user-highlight user-highlight-new';
                                 mark.setAttribute('style', 'background-color: ' + color + ' !important; color: inherit !important; padding: 2px 0; border-radius: 2px;');
                                 mark.dataset.highlightId = highlightId;
                                 mark.onclick = function(e) {
@@ -1811,25 +1893,28 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                             return;
                         }
 
-                        // Try to highlight in each occurrence (handles pagination splits)
+                        // Try to highlight - for paginated splits (continuations), try cross-element first
                         let highlighted = false;
-                        elements.forEach(element => {
-                            if (!highlighted) {
-                                highlighted = highlightTextInElement(element, highlight.text, highlight.color, highlight.id);
-                                if (highlighted) {
-                                    console.log("Applied highlight ID " + highlight.id + " in element " + highlight.elementId);
-                                }
-                            }
-                        });
-
-                        // If not found in individual elements, try across all elements combined
-                        // This handles text that spans pagination splits in two-page mode
-                        if (!highlighted && elements.length > 1) {
-                            console.log("Trying cross-element highlight for ID " + highlight.id);
+                        if (elements.length > 1) {
+                            // Multiple elements (original + continuations) - try cross-element first
+                            // since the text likely spans the pagination boundary
+                            console.log("Trying cross-element highlight for ID " + highlight.id + " (" + elements.length + " parts)");
                             highlighted = highlightTextAcrossElements(Array.from(elements), highlight.text, highlight.color, highlight.id);
                             if (highlighted) {
                                 console.log("Applied cross-element highlight ID " + highlight.id);
                             }
+                        }
+
+                        // Try individual elements (single element or cross-element failed)
+                        if (!highlighted) {
+                            elements.forEach(element => {
+                                if (!highlighted) {
+                                    highlighted = highlightTextInElement(element, highlight.text, highlight.color, highlight.id);
+                                    if (highlighted) {
+                                        console.log("Applied highlight ID " + highlight.id + " in element " + highlight.elementId);
+                                    }
+                                }
+                            });
                         }
 
                         // Final fallback: search entire page content for the text
@@ -1968,10 +2053,10 @@ fun ReaderControls(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                ReaderThemeIcon(userSettings.readerTheme == 0, Color.White, Color.Black) { onThemeChange(0) }
-                ReaderThemeIcon(userSettings.readerTheme == 1, Color(0xFFF4ECD8), Color(0xFF5B4636)) { onThemeChange(1) }
-                ReaderThemeIcon(userSettings.readerTheme == 2, Color(0xFF121212), Color(0xFFE0E0E0)) { onThemeChange(2) }
-                ReaderThemeIcon(userSettings.readerTheme == 3, Color.Black, Color.White) { onThemeChange(3) }
+                ReaderThemeIcon(userSettings.readerTheme == 0, Color(0xFFFAFAF9), Color.Black) { onThemeChange(0) }
+                ReaderThemeIcon(userSettings.readerTheme == 1, Color(0xFFFBF7F1), Color(0xFF4A3728)) { onThemeChange(1) }
+                ReaderThemeIcon(userSettings.readerTheme == 2, Color(0xFF1A1A1A), Color(0xFFE8E8E8)) { onThemeChange(2) }
+                ReaderThemeIcon(userSettings.readerTheme == 3, Color.Black, Color(0xFFF5F5F5)) { onThemeChange(3) }
             }
 
             Spacer(Modifier.height(8.dp))
@@ -2080,6 +2165,21 @@ fun ReaderAdvancedControls(
                 onCheckedChange = { viewModel.updateFullscreenMode(it) }
             )
         }
+
+        Spacer(Modifier.height(4.dp))
+
+        // Auto-hide toolbar toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Auto-hide Toolbar", style = MaterialTheme.typography.labelMedium)
+            Switch(
+                checked = userSettings.readerAutoHideToolbar,
+                onCheckedChange = { viewModel.updateAutoHideToolbar(it) }
+            )
+        }
     }
 }
 
@@ -2139,10 +2239,10 @@ data class ReaderThemeData(val bg: String, val text: String, val bgInt: Int, val
 
 fun getReaderTheme(themeId: Int): ReaderThemeData {
     return when(themeId) {
-        1 -> ReaderThemeData("#F4ECD8", "#5B4636", 0xFFF4ECD8.toInt(), 0xFF5B4636.toInt())
-        2 -> ReaderThemeData("#121212", "#E0E0E0", 0xFF121212.toInt(), 0xFFE0E0E0.toInt())
-        3 -> ReaderThemeData("#000000", "#FFFFFF", 0xFF000000.toInt(), 0xFFFFFFFF.toInt())
-        else -> ReaderThemeData("#FFFFFF", "#000000", 0xFFFFFFFF.toInt(), 0xFF000000.toInt())
+        1 -> ReaderThemeData("#FBF7F1", "#4A3728", 0xFFFBF7F1.toInt(), 0xFF4A3728.toInt())
+        2 -> ReaderThemeData("#1A1A1A", "#E8E8E8", 0xFF1A1A1A.toInt(), 0xFFE8E8E8.toInt())
+        3 -> ReaderThemeData("#000000", "#F5F5F5", 0xFF000000.toInt(), 0xFFF5F5F5.toInt())
+        else -> ReaderThemeData("#FAFAF9", "#000000", 0xFFFAFAF9.toInt(), 0xFF000000.toInt())
     }
 }
 
@@ -2178,12 +2278,31 @@ fun HighlightsSheet(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (highlights.isEmpty()) {
-            Text(
-                "No highlights yet. Select text to create a highlight.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 32.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_highlight),
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "No highlights yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Try selecting text while reading",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(highlights) { highlight ->
@@ -2469,12 +2588,31 @@ fun BookmarksSheet(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (bookmarks.isEmpty()) {
-            Text(
-                "No bookmarks yet. Tap + to create a bookmark at your current location.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 32.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_bookmark),
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "No bookmarks yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Tap the bookmark icon while reading",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(bookmarks) { bookmark ->

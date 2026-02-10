@@ -746,6 +746,13 @@ class ReaderViewModel(
         }
     }
 
+    fun updateAutoHideToolbar(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateReaderAutoHideToolbar(enabled)
+            settings = settings?.copy(readerAutoHideToolbar = enabled)
+        }
+    }
+
     // === FOLDABLE DEVICE SUPPORT ===
 
     fun updateScreenMode(mode: ReaderScreenMode, foldBounds: Int = 0) {
@@ -1008,12 +1015,12 @@ class ReaderViewModel(
     val highlightEvents = _highlightEvents.asSharedFlow()
 
     fun emitLongPressEvent(elementId: String) {
-        android.util.Log.e("ReaderViewModel", "=== EMITTING LongPressMenu event for: $elementId ===")
+        android.util.Log.d("ReaderViewModel", "Emitting LongPressMenu event for: $elementId")
         _highlightEvents.tryEmit(HighlightEvent.ShowLongPressMenu(elementId, pendingHighlight))
     }
 
     fun emitColorPickerEvent(pending: PendingHighlight) {
-        android.util.Log.e("ReaderViewModel", "=== EMITTING ColorPicker event for: ${pending.text.take(20)} ===")
+        android.util.Log.d("ReaderViewModel", "Emitting ColorPicker event")
         _highlightEvents.tryEmit(HighlightEvent.ShowColorPicker(pending))
     }
 

@@ -21,7 +21,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,7 +39,7 @@ fun BookItem(
     modifier: Modifier = Modifier
 ) {
     val isDownloading = downloadProgress != null
-    Card(
+    ElevatedCard(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
@@ -48,8 +47,9 @@ fun BookItem(
                 onLongClick = onLongClick
             ),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column {
@@ -89,31 +89,40 @@ fun BookItem(
                 }
                 
                 if (onDownloadClick != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(8.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .clickable(enabled = !isDownloading) { onDownloadClick() }
-                            .padding(8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isDownloading) {
-                            CircularProgressIndicator(
+                    if (isDownloading) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                        ) {
+                            LinearProgressIndicator(
                                 progress = { downloadProgress ?: 0f },
-                                modifier = Modifier.size(24.dp),
-                                color = Color.Green,
-                                strokeWidth = 2.dp,
-                                trackColor = Color.LightGray.copy(alpha = 0.3f)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = Color.Black.copy(alpha = 0.4f),
+                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                             )
                         }
-                        Icon(
-                            painter = painterResource(R.drawable.ic_download),
-                            contentDescription = "Download",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (book.isDownloaded) Color.Green else Color.LightGray
-                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .clickable { onDownloadClick() }
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_download),
+                                contentDescription = "Download",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (book.isDownloaded) Color.Green else Color.LightGray
+                            )
+                        }
                     }
                 }
 
@@ -144,19 +153,20 @@ fun BookItem(
                 }
 
                 if (!book.seriesIndex.isNullOrBlank()) {
-                    Box(
+                    Surface(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(4.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(6.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                        shadowElevation = 2.dp
                     ) {
                         Text(
                             text = "#${book.seriesIndex}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }

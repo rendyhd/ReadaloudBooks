@@ -57,8 +57,6 @@ object DownloadUtils {
         
         if (aExists || eExists || rExists) {
             android.util.Log.d("DownloadUtils", "Found downloaded content for ${book.title}: Audio=$aExists, Ebook=$eExists, ReadAloud=$rExists")
-            val bookDir = getBookDir(filesDir, book)
-            android.util.Log.d("DownloadUtils", "Book directory: ${bookDir.absolutePath}")
         }
         
         return aExists || eExists || rExists
@@ -127,7 +125,7 @@ object DownloadUtils {
                 }
                 
                 if (computedHash.equals(serverHash, ignoreCase = true)) {
-                    android.util.Log.i("DownloadUtils", "Hash verification successful for ${file.name}: $computedHash")
+                    android.util.Log.i("DownloadUtils", "Hash verification successful for ${file.name}")
                 } else {
                     android.util.Log.e("DownloadUtils", "Hash verification FAILED for ${file.name}! Server: $serverHash, Computed: $computedHash")
                 }

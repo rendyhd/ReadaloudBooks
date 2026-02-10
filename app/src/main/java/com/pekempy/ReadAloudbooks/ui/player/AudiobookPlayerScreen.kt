@@ -215,6 +215,27 @@ fun AudiobookPlayerScreen(
                 }
 
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                    // Chapter name above slider
+                    val currentChapterTitle by remember {
+                        derivedStateOf {
+                            val pos = viewModel.currentPosition
+                            viewModel.chapters.find {
+                                pos >= it.startOffset &&
+                                pos < it.startOffset + it.duration
+                            }?.title
+                        }
+                    }
+                    currentChapterTitle?.let { title ->
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                        )
+                    }
+
                     Slider(
                         value = if (viewModel.duration > 0) viewModel.currentPosition.toFloat() else 0f,
                         onValueChange = { viewModel.seekTo(it.toLong()) },
@@ -225,8 +246,16 @@ fun AudiobookPlayerScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(text = FormatUtils.formatTime(viewModel.currentPosition), style = MaterialTheme.typography.labelMedium)
-                        Text(text = FormatUtils.formatTime(viewModel.duration), style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = FormatUtils.formatTime(viewModel.currentPosition),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = FormatUtils.formatTime(viewModel.duration),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -266,8 +295,13 @@ fun AudiobookPlayerScreen(
                     }
                 }
 
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

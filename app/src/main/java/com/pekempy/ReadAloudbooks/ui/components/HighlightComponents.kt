@@ -144,16 +144,28 @@ fun ColorCircle(
     onClick: () -> Unit
 ) {
     Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(40.dp)
-            .background(color, CircleShape)
-            .border(
-                width = if (isSelected) 3.dp else 1.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
-                shape = CircleShape
+            .size(48.dp)
+            .then(
+                if (isSelected) Modifier.border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ).padding(4.dp) else Modifier.padding(4.dp)
             )
+            .background(color, CircleShape)
             .clickable(onClick = onClick)
-    )
+    ) {
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                    .border(1.dp, Color.DarkGray.copy(alpha = 0.3f), CircleShape)
+            )
+        }
+    }
 }
 
 /**

@@ -57,6 +57,9 @@ class UserPreferencesRepository(private val context: Context) {
         val ENABLE_VOLUME_BOOST = booleanPreferencesKey("enable_volume_boost")
         val VOLUME_BOOST_LEVEL = floatPreferencesKey("volume_boost_level")
 
+        // Reader auto-hide toolbar
+        val READER_AUTO_HIDE_TOOLBAR = booleanPreferencesKey("reader_auto_hide_toolbar")
+
         // Library view preferences
         val LIBRARY_VIEW_MODE = stringPreferencesKey("library_view_mode")
         val LIBRARY_GRID_COLUMNS = intPreferencesKey("library_grid_columns")
@@ -116,6 +119,7 @@ class UserPreferencesRepository(private val context: Context) {
             skipForwardSeconds = preferences[SKIP_FORWARD_SECONDS] ?: 30,
             enableVolumeBoost = preferences[ENABLE_VOLUME_BOOST] ?: false,
             volumeBoostLevel = preferences[VOLUME_BOOST_LEVEL] ?: 1.0f,
+            readerAutoHideToolbar = preferences[READER_AUTO_HIDE_TOOLBAR] ?: true,
             libraryViewMode = preferences[LIBRARY_VIEW_MODE] ?: "grid",
             libraryGridColumns = preferences[LIBRARY_GRID_COLUMNS] ?: 2
         )
@@ -310,6 +314,12 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateReaderAutoHideToolbar(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[READER_AUTO_HIDE_TOOLBAR] = enabled
+        }
+    }
+
     suspend fun updateSkipBackSeconds(seconds: Int) {
         context.dataStore.edit { preferences ->
             preferences[SKIP_BACK_SECONDS] = seconds
@@ -432,6 +442,8 @@ data class UserSettings(
     val skipForwardSeconds: Int = 30,
     val enableVolumeBoost: Boolean = false,
     val volumeBoostLevel: Float = 1.0f,
+    // Reader auto-hide toolbar
+    val readerAutoHideToolbar: Boolean = true,
     // Library view preferences
     val libraryViewMode: String = "grid", // grid, list, compact, table
     val libraryGridColumns: Int = 2

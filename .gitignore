@@ -65,3 +65,5 @@ kotlin-ide/
 /.idea/AndroidProjectSystem.xml
 release.keystore
 keystore.properties
+.claude/
+nul

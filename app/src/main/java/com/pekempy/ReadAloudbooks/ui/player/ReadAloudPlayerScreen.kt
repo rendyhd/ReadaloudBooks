@@ -997,23 +997,38 @@ fun ReadAloudFullPlayerOverlay(
                 valueRange = 0f..(if (viewModel.duration > 0) viewModel.duration.toFloat() else 1f)
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(FormatUtils.formatTime(viewModel.currentPosition), style = MaterialTheme.typography.labelMedium)
-                Text(FormatUtils.formatTime(viewModel.duration), style = MaterialTheme.typography.labelMedium)
+                Text(
+                    FormatUtils.formatTime(viewModel.currentPosition),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    FormatUtils.formatTime(viewModel.duration),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            
+
             Spacer(Modifier.height(24.dp))
-            
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { viewModel.rewind10s() }) { Icon(painterResource(R.drawable.ic_replay_10), null, Modifier.size(32.dp)) }
-                IconButton(onClick = { viewModel.togglePlayPause() }, modifier = Modifier.size(72.dp)) {
-                    Icon(painterResource(if (viewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow), null, Modifier.size(48.dp))
+                FilledIconButton(
+                    onClick = { viewModel.togglePlayPause() },
+                    modifier = Modifier.size(72.dp),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Icon(painterResource(if (viewModel.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow), null, Modifier.size(40.dp))
                 }
                 IconButton(onClick = { viewModel.forward30s() }) { Icon(painterResource(R.drawable.ic_forward_30), null, Modifier.size(32.dp)) }
             }
-            
-            Spacer(Modifier.height(32.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 24.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = onShowSpeed) { Text("${"%.2f".format(viewModel.playbackSpeed)}x Speed") }
                 IconButton(onClick = onShowChapters) { Icon(painterResource(R.drawable.ic_list), null) }
             }

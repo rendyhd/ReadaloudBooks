@@ -36,7 +36,6 @@ import com.pekempy.ReadAloudbooks.ui.reader.ReaderScreen
 import com.pekempy.ReadAloudbooks.ui.reader.ReaderViewModel
 import com.pekempy.ReadAloudbooks.ui.player.AudiobookPlayerScreen
 import com.pekempy.ReadAloudbooks.ui.player.AudiobookViewModel
-import com.pekempy.ReadAloudbooks.ui.theme.ReadAloudBooksTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import com.pekempy.ReadAloudbooks.ui.player.MiniPlayerBar
@@ -419,6 +418,25 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         com.pekempy.ReadAloudbooks.ui.settings.SettingsEbook(
+                            viewModel = settingsViewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(
+                        route = "settings/backup",
+                        enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                        exitTransition = { slideOutHorizontally(targetOffsetX = { it }) },
+                        popEnterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                        popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+                    ) {
+                        val settingsViewModel = viewModel<com.pekempy.ReadAloudbooks.ui.settings.SettingsViewModel>(
+                            factory = object : ViewModelProvider.Factory {
+                                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                                    return com.pekempy.ReadAloudbooks.ui.settings.SettingsViewModel(repository) as T
+                                }
+                            }
+                        )
+                        com.pekempy.ReadAloudbooks.ui.settings.SettingsBackup(
                             viewModel = settingsViewModel,
                             onBack = { navController.popBackStack() }
                         )

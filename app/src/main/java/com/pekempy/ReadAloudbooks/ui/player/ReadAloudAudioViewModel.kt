@@ -48,6 +48,10 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
     var sleepTimerFinishChapter by mutableStateOf(false)
     var currentElementId by mutableStateOf<String?>(null)
         private set
+    private var pendingElementId: String? = null
+    private var pendingStableCount = 0
+    private var seekStabilizing = false
+    private var seekStabilizeUntil = 0L
     
     var audioChapterOffsets by mutableStateOf<Map<String, Double>>(emptyMap())
         private set
@@ -838,7 +842,13 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
             val subMatch = clip.subSegments
                 .filter { offsetInClip >= it.relativeStartMs && offsetInClip < it.relativeStartMs + it.durationMs }
                 .maxByOrNull { it.relativeStartMs }
+                ?: clip.subSegments.minByOrNull { kotlin.math.abs(offsetInClip - it.relativeStartMs) }
             currentElementId = subMatch?.elementId ?: clip.elementId
+            // Set immediate element, then suppress progress-loop updates for 300ms to prevent jumping
+            pendingElementId = currentElementId
+            pendingStableCount = 2
+            seekStabilizing = true
+            seekStabilizeUntil = System.currentTimeMillis() + 300L
         } else if (validPosition <= 0) {
             player.seekTo(0, 0)
             currentPosition = 0
@@ -883,11 +893,28 @@ class ReadAloudAudioViewModel(private val repository: UserPreferencesRepository)
                             
                             val subMatch = clip.subSegments
                                 .filter { posInClip >= it.relativeStartMs && posInClip < it.relativeStartMs + it.durationMs }
-                                .maxByOrNull { it.relativeStartMs }  
-                            
-                            if (currentElementId != (subMatch?.elementId ?: clip.elementId)) {
-                                currentElementId = subMatch?.elementId ?: clip.elementId
-                                android.util.Log.d("ReadAloudAudioVM", "Element changed: $currentElementId at $currentPosition ms")
+                                .maxByOrNull { it.relativeStartMs }
+                                // Boundary fallback: when filter returns empty (exact boundary), find nearest
+                                ?: clip.subSegments.minByOrNull { kotlin.math.abs(posInClip - it.relativeStartMs) }
+
+                            val candidateId = subMatch?.elementId ?: clip.elementId
+
+                            // Skip updates while stabilizing after a seek
+                            if (seekStabilizing && System.currentTimeMillis() < seekStabilizeUntil) {
+                                // Don't update element during seek stabilization
+                            } else {
+                                seekStabilizing = false
+                                // Debounce: only update when same candidate seen 2 consecutive ticks
+                                if (candidateId == pendingElementId) {
+                                    pendingStableCount++
+                                    if (pendingStableCount >= 2 && currentElementId != candidateId) {
+                                        currentElementId = candidateId
+                                        android.util.Log.d("ReadAloudAudioVM", "Element changed: $currentElementId at $currentPosition ms")
+                                    }
+                                } else {
+                                    pendingElementId = candidateId
+                                    pendingStableCount = 1
+                                }
                             }
                         }
                     }
