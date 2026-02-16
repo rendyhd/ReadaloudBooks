@@ -1,4 +1,27 @@
-# ReadAloud Books - Development Session Summary
+# ReadAloud Books - Development Guide
+
+## CRITICAL: Dual-Screen Architecture
+
+**This app has TWO separate screen implementations that MUST BOTH be updated for any reader/highlight/WebView change:**
+
+1. **`ReaderScreen.kt`** (`ui/reader/`) - Standard ePub reader mode
+2. **`ReadAloudPlayerScreen.kt`** (`ui/player/`) - ReadAloud mode with audio sync
+
+Both screens use the shared `EpubWebView` composable (defined in `ReaderScreen.kt`) and share the same `ReaderViewModel`. However, each screen has its **own separate UI code** for:
+- Highlight actions (bottom sheets, dialogs, edit mode bars)
+- Toolbar/controls overlays
+- Click handlers and callbacks wired to `HighlightActionsSheet`, `HighlightDialog`, etc.
+
+**When modifying ANY reader feature (highlights, selection, WebView interactions, overlays), you MUST update BOTH files.** Forgetting `ReadAloudPlayerScreen.kt` is a recurring mistake.
+
+### Checklist for Reader Changes
+- [ ] Updated `ReaderScreen.kt`
+- [ ] Updated `ReadAloudPlayerScreen.kt`
+- [ ] Added new `EpubWebView` parameters to BOTH call sites
+- [ ] Added new UI overlays (floating bars, dialogs) to BOTH screens
+- [ ] Added BackHandlers to BOTH screens if needed
+
+---
 
 ## Session Context
 This session continued work on the ReadAloud Books Android app after implementing 20 app improvement features. The session focused on fixing critical bugs and removing unwanted features based on user feedback.

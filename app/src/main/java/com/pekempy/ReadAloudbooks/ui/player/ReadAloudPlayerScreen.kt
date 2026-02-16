@@ -363,6 +363,11 @@ fun ReadAloudPlayerScreen(
         )
     }
 
+    // Cancel highlight edit mode on back press
+    androidx.activity.compose.BackHandler(enabled = readerViewModel.isHighlightEditMode) {
+        readerViewModel.cancelHighlightEdit()
+    }
+
     if (userSettings != null && readerViewModel.totalChapters > 0) {
         val theme = getReaderTheme(userSettings.readerTheme)
         val accentColor = MaterialTheme.colorScheme.primary
@@ -383,6 +388,9 @@ fun ReadAloudPlayerScreen(
                 activeSearch = readerViewModel.activeSearchHighlight,
                 activeSearchMatchIndex = readerViewModel.activeSearchMatchIndex,
                 pendingAnchor = readerViewModel.pendingAnchorId.value,
+                clearSelectionTrigger = readerViewModel.clearSelectionTrigger,
+                editModeTrigger = readerViewModel.editModeTrigger,
+                isHighlightEditMode = readerViewModel.isHighlightEditMode,
                 onTap = {  },
                 isTwoPageMode = isTwoPageMode,
                 pageGapDp = readerViewModel.innerScreenSettings?.pageGap ?: 16
@@ -573,6 +581,53 @@ fun ReadAloudPlayerScreen(
                     onShowSleep = { showSleepTimerSheet = true }
                 )
             }
+
+            // Floating highlight edit bar
+            AnimatedVisibility(
+                visible = readerViewModel.isHighlightEditMode,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 80.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Adjust selection, then save",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = { readerViewModel.cancelHighlightEdit() }
+                        ) {
+                            Text("Cancel")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = { readerViewModel.saveHighlightEdit() },
+                            enabled = readerViewModel.pendingEditedSelection != null
+                        ) {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
         }
 
         if (showSpeedSheet) {
@@ -741,7 +796,7 @@ fun ReadAloudPlayerScreen(
             } else {
                 com.pekempy.ReadAloudbooks.ui.components.HighlightActionsSheet(
                     highlight = highlight,
-                    onEdit = { showEditDialog = true },
+                    onEdit = { readerViewModel.enterHighlightEditMode(highlight) },
                     onChangeColor = { showEditDialog = true },
                     onCopy = {
                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager

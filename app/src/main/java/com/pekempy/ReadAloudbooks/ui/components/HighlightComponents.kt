@@ -287,7 +287,7 @@ fun HighlightActionsSheet(
             )
 
             HighlightAction(icon = "✏️", text = "Edit", onClick = onEdit)
-            HighlightAction(icon = "🎨", text = "Change Color", onClick = onChangeColor)
+            HighlightAction(icon = "🎨", text = "Change Color & Note", onClick = onChangeColor)
             HighlightAction(icon = "📋", text = "Copy Text", onClick = onCopy)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             HighlightAction(

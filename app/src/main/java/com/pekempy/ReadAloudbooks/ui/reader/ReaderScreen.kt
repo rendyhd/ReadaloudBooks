@@ -56,6 +56,11 @@ fun ReaderScreen(
     var showLongPressMenu by remember { mutableStateOf(false) }
     var showToolbar by remember { mutableStateOf(true) }
 
+    // Cancel highlight edit mode on back press
+    androidx.activity.compose.BackHandler(enabled = viewModel.isHighlightEditMode) {
+        viewModel.cancelHighlightEdit()
+    }
+
     val highlights by viewModel.getHighlightsForBook().collectAsState(initial = emptyList())
     val bookmarks by viewModel.bookmarks
 
@@ -231,6 +236,8 @@ fun ReaderScreen(
                 activeSearchMatchIndex = viewModel.activeSearchMatchIndex,
                 pendingAnchor = viewModel.pendingAnchorId.value,
                 clearSelectionTrigger = viewModel.clearSelectionTrigger,
+                editModeTrigger = viewModel.editModeTrigger,
+                isHighlightEditMode = viewModel.isHighlightEditMode,
                 onTap = {
                     showToolbar = !showToolbar
                     if (!showToolbar) viewModel.showControls = false
@@ -337,8 +344,55 @@ fun ReaderScreen(
                     isTwoPageMode = isTwoPageMode
                 )
             }
+
+            // Floating highlight edit bar
+            androidx.compose.animation.AnimatedVisibility(
+                visible = viewModel.isHighlightEditMode,
+                enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(16.dp)
+            ) {
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Adjust selection, then save",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { viewModel.cancelHighlightEdit() }
+                        ) {
+                            Text("Cancel")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        androidx.compose.material3.Button(
+                            onClick = { viewModel.saveHighlightEdit() },
+                            enabled = viewModel.pendingEditedSelection != null
+                        ) {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
         }
-        
+
         if (showSearchSheet) {
             ModalBottomSheet(onDismissRequest = { showSearchSheet = false }) {
                 com.pekempy.ReadAloudbooks.ui.player.SearchContent(
@@ -453,7 +507,7 @@ fun ReaderScreen(
             } else {
                 com.pekempy.ReadAloudbooks.ui.components.HighlightActionsSheet(
                     highlight = highlight,
-                    onEdit = { showEditDialog = true },
+                    onEdit = { viewModel.enterHighlightEditMode(highlight) },
                     onChangeColor = { showEditDialog = true },
                     onCopy = {
                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -497,6 +551,8 @@ fun EpubWebView(
     activeSearchMatchIndex: Int = 0,
     pendingAnchor: String? = null,
     clearSelectionTrigger: Int = 0,
+    editModeTrigger: Int = 0,
+    isHighlightEditMode: Boolean = false,
     onTap: () -> Unit,
     isTwoPageMode: Boolean = false,
     pageGapDp: Int = 16
@@ -674,6 +730,10 @@ fun EpubWebView(
                             try {
                                 val id = idStr.toLong()
                                 viewModel.viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                    // Cancel any active edit mode first
+                                    if (viewModel.isHighlightEditMode) {
+                                        viewModel.cancelHighlightEdit()
+                                    }
                                     android.util.Log.d("ReaderScreen", "Looking for highlight $id in ${viewModel.highlightsForCurrentChapter.value.size} highlights")
                                     val highlight = viewModel.highlightsForCurrentChapter.value.find { it.id == id }
                                     if (highlight != null) {
@@ -685,6 +745,49 @@ fun EpubWebView(
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("ReaderScreen", "Error parsing highlight ID", e)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun onHighlightEditSelectionChanged(highlightIdStr: String, newElementId: String, newText: String) {
+                            android.util.Log.d("ReaderScreen", "onHighlightEditSelectionChanged: id=$highlightIdStr, elem=$newElementId, text=${newText.take(30)}...")
+                            try {
+                                val highlightId = highlightIdStr.toLong()
+                                viewModel.viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                    viewModel.updateEditedSelection(highlightId, newElementId, newText)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("ReaderScreen", "Error in onHighlightEditSelectionChanged", e)
+                            }
+                        }
+
+                        @JavascriptInterface
+                        fun simulateLongPressForSelection(jsX: Float, jsY: Float, viewportWidth: Float) {
+                            val webView = this@apply
+                            val scaleFactor = webView.width.toFloat() / viewportWidth
+                            val viewX = jsX * scaleFactor
+                            val viewY = jsY * scaleFactor
+
+                            webView.post {
+                                val downTime = android.os.SystemClock.uptimeMillis()
+                                val downEvent = android.view.MotionEvent.obtain(
+                                    downTime, downTime,
+                                    android.view.MotionEvent.ACTION_DOWN,
+                                    viewX, viewY, 0
+                                )
+                                webView.dispatchTouchEvent(downEvent)
+                                downEvent.recycle()
+
+                                webView.postDelayed({
+                                    val upTime = android.os.SystemClock.uptimeMillis()
+                                    val upEvent = android.view.MotionEvent.obtain(
+                                        downTime, upTime,
+                                        android.view.MotionEvent.ACTION_UP,
+                                        viewX, viewY, 0
+                                    )
+                                    webView.dispatchTouchEvent(upEvent)
+                                    upEvent.recycle()
+                                }, 700)
                             }
                         }
                     }, "Android")
@@ -808,6 +911,25 @@ fun EpubWebView(
                         webView.evaluateJavascript("if (typeof clearTextSelection === 'function') clearTextSelection()", null)
                     }, 400)  // Wait a bit longer than highlight application
                     webView.setTag(com.pekempy.ReadAloudbooks.R.id.clear_selection_tag, clearSelectionTrigger)
+                }
+
+                // Highlight edit mode trigger
+                val lastEditTrigger = webView.getTag(com.pekempy.ReadAloudbooks.R.id.edit_mode_tag) as? Int ?: 0
+                if (editModeTrigger > 0 && editModeTrigger != lastEditTrigger) {
+                    if (isHighlightEditMode) {
+                        val editId = viewModel.editingHighlight?.id
+                        if (editId != null) {
+                            android.util.Log.d("EpubWebView", "Entering highlight edit mode for ID: $editId")
+                            webView.postDelayed({
+                                webView.evaluateJavascript("if (typeof enterHighlightEditMode === 'function') enterHighlightEditMode($editId)", null)
+                            }, 300)
+                        }
+                    }
+                    webView.setTag(com.pekempy.ReadAloudbooks.R.id.edit_mode_tag, editModeTrigger)
+                }
+                if (!isHighlightEditMode && lastEditTrigger > 0) {
+                    webView.evaluateJavascript("if (typeof exitHighlightEditMode === 'function') exitHighlightEditMode()", null)
+                    webView.setTag(com.pekempy.ReadAloudbooks.R.id.edit_mode_tag, 0)
                 }
             }
         )
@@ -1510,12 +1632,18 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 }, false);
                 
                 document.addEventListener('touchend', function(e) {
+                    if (window._highlightEditMode) return;
                     const deltaX = e.changedTouches[0].screenX - touchStartX;
                     const deltaTime = Date.now() - touchStartTime;
                     if (Math.abs(deltaX) > 40 && deltaTime < 300) {
                         if (deltaX > 0) pageLeft();
                         else pageRight();
                     } else if (Math.abs(deltaX) < 10 && deltaTime < 300) {
+                        // Skip page navigation if tap was on a highlight
+                        const target = e.target;
+                        if (target && target.closest && target.closest('.user-highlight')) {
+                            return;
+                        }
                         const tapX = e.changedTouches[0].clientX;
                         const width = window.innerWidth;
                         if (window.Android) window.Android.onBodyClick(tapX, width, isTwoPageMode);
@@ -1525,6 +1653,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                 // Text selection for highlights
                 let selectionTimeout = null;
                 let isLongPressHandled = false;
+                let highlightJustCreated = false;
 
                 document.addEventListener('selectionchange', function() {
                     const selection = window.getSelection();
@@ -1532,12 +1661,38 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                     clearTimeout(selectionTimeout);
                     selectionTimeout = setTimeout(function() {
-                        console.log("Selection timeout triggered, isLongPressHandled:", isLongPressHandled);
+                        console.log("Selection timeout triggered, isLongPressHandled:", isLongPressHandled, "highlightJustCreated:", highlightJustCreated);
 
                         // Skip if long-press already handled this
                         if (isLongPressHandled) {
                             console.log("Skipping - long press already handled");
                             isLongPressHandled = false;
+                            return;
+                        }
+
+                        // Skip if a highlight was just created (prevents duplicates from DOM changes)
+                        if (highlightJustCreated) {
+                            console.log("Skipping - highlight just created");
+                            highlightJustCreated = false;
+                            return;
+                        }
+
+                        // Handle highlight edit mode - update selection instead of creating new
+                        if (window._highlightEditMode && window._editingHighlightId) {
+                            const sel = window.getSelection();
+                            if (sel && sel.toString().trim().length > 0) {
+                                const newText = sel.toString().trim();
+                                let el = sel.anchorNode;
+                                while (el && el.nodeType !== Node.ELEMENT_NODE) el = el.parentNode;
+                                while (el && !el.id && !el.getAttribute('data-continuation-of')) el = el.parentElement;
+                                const newElementId = el ? (el.id || el.getAttribute('data-continuation-of')) : null;
+                                if (newElementId && window.Android) {
+                                    console.log("Edit mode: selection changed to:", newText.substring(0, 30));
+                                    window.Android.onHighlightEditSelectionChanged(
+                                        window._editingHighlightId.toString(), newElementId, newText
+                                    );
+                                }
+                            }
                             return;
                         }
 
@@ -1570,17 +1725,17 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
 
                             if (elementId && window.Android) {
                                 console.log("Calling Android.onTextSelected with text: " + selectedText.substring(0, 30) + "...");
+                                highlightJustCreated = true;
                                 window.Android.onTextSelected(elementId, selectedText);
+                                // Clear selection immediately to prevent re-triggering from DOM changes
+                                selection.removeAllRanges();
                             } else {
                                 console.log("NOT calling Android - element:", !!anchorEl, "element.id:", anchorEl ? anchorEl.id : "N/A", "Android:", !!window.Android);
                             }
-
-                            // DO NOT clear selection - let user see what they selected
-                            // The selection will be cleared manually after highlight creation
                         } else {
                             console.log("No selection or empty selection");
                         }
-                    }, 300);  // Debounce for snappier highlight feel
+                    }, 800);  // Give users more time to complete selection
                 });
 
                 // Disable default context menu completely
@@ -1605,6 +1760,7 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     longPressTarget = e.target;
 
                     longPressTimer = setTimeout(function() {
+                        if (window._highlightEditMode) return;
                         console.log("Long-press timer fired (1 second, no movement)");
                         isLongPressHandled = true;
 
@@ -1955,6 +2111,50 @@ fun wrapHtml(html: String, userSettings: UserSettings, theme: ReaderThemeData, i
                     if (selection) {
                         selection.removeAllRanges();
                     }
+                }
+
+                // Highlight edit mode functions
+                window._highlightEditMode = false;
+                window._editingHighlightId = null;
+
+                function selectHighlightText(highlightId) {
+                    const marks = document.querySelectorAll('mark.user-highlight[data-highlight-id="' + highlightId + '"]');
+                    if (marks.length === 0) {
+                        console.warn("No mark elements found for highlight ID:", highlightId);
+                        return false;
+                    }
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    const range = document.createRange();
+                    range.setStartBefore(marks[0].firstChild || marks[0]);
+                    const lastMark = marks[marks.length - 1];
+                    range.setEndAfter(lastMark.lastChild || lastMark);
+                    selection.addRange(range);
+                    console.log("Selected highlight text:", selection.toString().substring(0, 50));
+                    return true;
+                }
+
+                function enterHighlightEditMode(highlightId) {
+                    window._highlightEditMode = true;
+                    window._editingHighlightId = highlightId;
+                    highlightJustCreated = true;
+
+                    // Get coordinates of first mark element to trigger native long-press selection
+                    const marks = document.querySelectorAll('mark.user-highlight[data-highlight-id="' + highlightId + '"]');
+                    if (marks.length > 0 && window.Android) {
+                        const rect = marks[0].getBoundingClientRect();
+                        const x = rect.left + 5;
+                        const y = rect.top + rect.height / 2;
+                        window.Android.simulateLongPressForSelection(x, y, window.innerWidth);
+                    }
+
+                    console.log("Entered highlight edit mode for ID:", highlightId);
+                }
+
+                function exitHighlightEditMode() {
+                    window._highlightEditMode = false;
+                    window._editingHighlightId = null;
+                    console.log("Exited highlight edit mode");
                 }
             </script>
         </head>

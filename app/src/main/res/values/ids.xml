@@ -6,4 +6,5 @@
     <item name="trigger_tag" type="id"/>
     <item name="user_highlights_tag" type="id"/>
     <item name="clear_selection_tag" type="id"/>
+    <item name="edit_mode_tag" type="id"/>
 </resources>

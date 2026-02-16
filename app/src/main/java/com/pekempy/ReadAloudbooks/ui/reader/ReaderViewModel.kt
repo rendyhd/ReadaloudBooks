@@ -1006,6 +1006,47 @@ class ReaderViewModel(
     private var highlightCollectionJob: Job? = null
     var clearSelectionTrigger by mutableIntStateOf(0)  // Trigger to clear text selection
 
+    // Highlight edit mode
+    var editingHighlight by mutableStateOf<Highlight?>(null)
+    var isHighlightEditMode by mutableStateOf(false)
+    var editModeTrigger by mutableIntStateOf(0)
+    var pendingEditedSelection by mutableStateOf<Triple<Long, String, String>?>(null) // (highlightId, newElementId, newText)
+
+    fun enterHighlightEditMode(highlight: Highlight) {
+        editingHighlight = highlight
+        isHighlightEditMode = true
+        clickedHighlight = null
+        editModeTrigger++
+    }
+
+    fun saveHighlightEdit() {
+        val (_, newElementId, newText) = pendingEditedSelection ?: return
+        val original = editingHighlight ?: return
+        viewModelScope.launch {
+            highlightRepository.updateHighlight(original.copy(text = newText, elementId = newElementId))
+            exitHighlightEditMode()
+            loadHighlightsForChapter(currentChapterIndex)
+        }
+    }
+
+    fun cancelHighlightEdit() {
+        exitHighlightEditMode()
+        loadHighlightsForChapter(currentChapterIndex)
+    }
+
+    private fun exitHighlightEditMode() {
+        editingHighlight = null
+        isHighlightEditMode = false
+        pendingEditedSelection = null
+        clearSelectionTrigger++
+    }
+
+    fun updateEditedSelection(highlightId: Long, newElementId: String, newText: String) {
+        if (isHighlightEditMode && editingHighlight?.id == highlightId) {
+            pendingEditedSelection = Triple(highlightId, newElementId, newText)
+        }
+    }
+
     // Event flow for highlight UI events (bypasses Compose state observation issues)
     sealed class HighlightEvent {
         data class ShowLongPressMenu(val elementId: String, val pendingHighlight: PendingHighlight?) : HighlightEvent()
@@ -1170,10 +1211,6 @@ class ReaderViewModel(
             )
             highlightRepository.addHighlight(highlight)
             loadHighlightsForChapter(chapterIndex)
-
-            // Clear text selection after creating highlight
-            delay(100)  // Small delay to ensure highlight is applied first
-            clearSelectionTrigger++
         }
     }
 

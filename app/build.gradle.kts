@@ -10,12 +10,12 @@ plugins {
 
 android {
     namespace = "com.pekempy.ReadAloudbooks"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.pekempy.ReadAloudbooks"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = project.findProperty("versionCode")?.toString()?.toInt() ?: 1
         versionName = project.findProperty("versionName")?.toString() ?: "1.0"
 
@@ -95,6 +95,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }
